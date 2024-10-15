@@ -1,1 +1,2 @@
+-   inventories 0.1.0.9002: link updates
 -   inventories 0.1.0.9001: init

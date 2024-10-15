@@ -1,8 +1,8 @@
 # inventories
-Oct 8, 2024
+Oct 15, 2024
 
 [![](https://www.repostatus.org/badges/latest/wip.svg)](https://www.repostatus.org/#wip)
-[![lint](https://github.com/Bioforest-projectDataAgr_inventories/workflows/lint/badge.svg)](https://github.com/Bioforest-projectDataAgr_inventories/actions?query=workflow%3Alint)
+[![lint](https://github.com/Bioforest-project/inventories/workflows/lint/badge.svg)](https://github.com/Bioforest-project/inventories/actions?query=workflow%3Alint)
 
 **inventories** is a sub-project of the
 [**BioForest**](https://github.com/Bioforest-project) project aimed at
@@ -20,7 +20,7 @@ that can be run with R and associated environment defined with
 **inventories** includes:
 
 - Analyse of the data with associated [documentation and
-  figures](https://bioforest-project.github.ioDataAgr_inventories/):
+  figures](https://bioforest-project.github.io/inventories/):
   - Reproductive analyses in `files.qmd`
   - Resulting pages in `docs/`
   - Document structure definition in `_quarto.yml`
@@ -41,15 +41,14 @@ You can contribute to the project by forking the repository on github
 and cloning the fork to your machine using several options, including
 GitHub desktop GUI. Further informations on contribution are detailed in
 the online document:
-<https://bioforest-project.github.ioDataAgr_inventories/98_contributing.html>.
+<https://bioforest-project.github.io/inventories/98_contributing.html>.
 
 ## Help
 
 Please preferentially create an issue on GitHub for any questions, bugs
 or help needed regarding **species**:
-<https://github.com/Bioforest-projectDataAgr_inventories/issues> . You
-may however reach us by mail with people from the core group (see
-below).
+<https://github.com/Bioforest-project/inventories/issues> . You may
+however reach us by mail with people from the core group (see below).
 
 ## Core group
 
