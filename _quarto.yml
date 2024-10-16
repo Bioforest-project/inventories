@@ -9,9 +9,6 @@ book:
     - index.qmd
     - 10_analyses.qmd
   appendices:
-    - 96_literature.qmd
-    - 97_meeting.qmd
-    - 98_contributing.qmd
     - 99_references.qmd
 
 bibliography: references.bib

@@ -6,7 +6,7 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2024-10-15">
+<meta name="dcterms.date" content="2024-10-16">
 
 <title>inventories</title>
 <style>
@@ -122,24 +122,6 @@ ul.task-list li input[type="checkbox"] {
       <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="./96_literature.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Literature</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="./97_meeting.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Meetings</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="./98_contributing.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Contributing</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
   <a href="./99_references.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">References</span></a>
   </div>
@@ -183,7 +165,7 @@ ul.task-list li input[type="checkbox"] {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">October 15, 2024</p>
+      <p class="date">October 16, 2024</p>
     </div>
   </div>
   
@@ -205,22 +187,27 @@ ul.task-list li input[type="checkbox"] {
 <h2 class="anchored" data-anchor-id="project">Project</h2>
 <p><strong>inventories</strong> includes:</p>
 <ul>
+<li>Data aggregation script <code>analyses/data_aggregation.qmd</code></li>
+<li>Automatic reports after quarto compilations of the data aggregation scripts in <code>reports/</code></li>
 <li>Analyse of the data with associated <a href="https://bioforest-project.github.io/inventories/">documentation and figures</a>:
 <ul>
 <li>Reproductive analyses in <code>files.qmd</code></li>
 <li>Resulting pages in <code>docs/</code></li>
 <li>Document structure definition in <code>_quarto.yml</code></li>
 </ul></li>
-<li>Data in <code>data/</code></li>
+<li>Data in <code>data/</code> with:
+<ul>
+<li>All raw data in <code>raw_data/</code></li>
+<li>All derived data in <code>derived_sata/</code></li>
+</ul></li>
+<li>R scripts with funtions in <code>r/</code></li>
 <li>Intermediary files in <code>outputs/</code></li>
+<li>Figures in <code>figures/</code></li>
 <li>R environment definition with <a href="https://rstudio.github.io/renv/articles/renv.html">renv</a> in <code>renv/</code> and <code>renv/lock</code></li>
 <li>R files (<code>.Rbuildignore</code> , <code>.Rdata</code> , <code>.Rprofile</code> , <code>.Rhistory</code>)</li>
 <li>Git and GitHub files (<code>.gitignore</code> , <code>.github/</code>)</li>
-<li>Project documentation (<code>README.qmd</code> , <code>README.md</code> , <code>NEWS.md</code> )</li>
+<li>Project documentation (<code>README.qmd</code> , <code>README.md</code> , <code>NEWS.md</code>, <code>LICENSE</code> )</li>
 </ul>
-<blockquote class="blockquote">
-<p>Should we add a license?</p>
-</blockquote>
 </section>
 <section id="contribution" class="level2">
 <h2 class="anchored" data-anchor-id="contribution">Contribution</h2>
@@ -228,7 +215,7 @@ ul.task-list li input[type="checkbox"] {
 </section>
 <section id="help" class="level2">
 <h2 class="anchored" data-anchor-id="help">Help</h2>
-<p>Please preferentially create an issue on GitHub for any questions, bugs or help needed regarding <strong>inventories</strong>: <a href="https://github.com/Bioforest-project/inventories/issues" class="uri">https://github.com/Bioforest-project/inventories/issues</a> . You may however reach us by mail with people from the core group (see below).</p>
+<p>Please preferentially create an issue on GitHub for any questions, bugs or help needed regarding <strong>inventories</strong>: <a href="https://bioforest-project.github.io/data_preparation/98_contributing.html" class="uri">https://bioforest-project.github.io/data_preparation/98_contributing.html</a>. You may however reach us by mail with people from the core group (see below).</p>
 </section>
 <section id="core-group" class="level2">
 <h2 class="anchored" data-anchor-id="core-group">Core group</h2>

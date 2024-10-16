@@ -47,7 +47,7 @@ You can contribute to the project by forking the repository on github
 and cloning the fork to your machine using several options, including
 GitHub desktop GUI. Further informations on contribution are detailed in
 the online document:
-<https://bioforest-project.github.io/inventories/98_contributing.html>.
+<https://bioforest-project.github.io/data_preparation/98_contributing.html>.
 
 ## Help
 
