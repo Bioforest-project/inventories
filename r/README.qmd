@@ -1,6 +1,5 @@
 ---
 title: "R"
-author: Sylvain Schmitt -
 date: today
 date-format: medium
 format: 
@@ -9,9 +8,11 @@ format:
     toc-depth: 2
 ---
 
-This folder will contains all R scriptswith R functions for all analyses . In particular:
+This folder contains all R functions used in the analyses.
 
--   `...`
+-   `taper`: taper correction function from Cushman et al. 2014
+
+-   ...
 
 ```{r, comment=""}
 fs::dir_tree()
