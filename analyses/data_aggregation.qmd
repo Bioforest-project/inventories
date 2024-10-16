@@ -1,0 +1,12 @@
+---
+title: "Data aggregation"
+format:
+  pdf:
+    toc: true
+    number-sections: true
+    colorlinks: true
+---
+
+# Introduction
+
+This is a dummy document for tests.

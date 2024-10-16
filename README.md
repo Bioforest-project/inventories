@@ -19,6 +19,9 @@ that can be run with R and associated environment defined with
 
 **inventories** includes:
 
+- Data aggregation script `analyses/data_aggregation.qmd`
+- Automatic reports after quarto compilations of the data aggregation
+  scripts in `reports/`
 - Analyse of the data with associated [documentation and
   figures](https://bioforest-project.github.io/inventories/):
   - Reproductive analyses in `files.qmd`
@@ -27,7 +30,7 @@ that can be run with R and associated environment defined with
 - Data in `data/` with:
   - All raw data in `raw_data/`
   - All derived data in `derived_sata/`
-- R and other scripts in `scripts/`
+- R scripts with funtions in `r/`
 - Intermediary files in `outputs/`
 - Figures in `figures/`
 - R environment definition with

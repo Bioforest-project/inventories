@@ -1,3 +1,4 @@
+-   inventories 0.1.0.9004: inventory repo str test #6
 -   inventories 0.1.0.9003: new structure closer to R compendium
 -   inventories 0.1.0.9002: link updates
 -   inventories 0.1.0.9001: init

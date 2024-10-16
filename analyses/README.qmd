@@ -1,5 +1,5 @@
 ---
-title: "Scripts"
+title: "Analyses"
 author: Sylvain Schmitt -
 date: today
 date-format: medium
@@ -9,7 +9,7 @@ format:
     toc-depth: 2
 ---
 
-This folder will contains all scripts for species all analyses. In particular:
+Folder with the data aggregation script.
 
 -   `...`
 

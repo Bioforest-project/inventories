@@ -1,0 +1,18 @@
+---
+title: "Reports"
+author: Sylvain Schmitt -
+date: today
+date-format: medium
+format: 
+  gfm:
+    toc: true
+    toc-depth: 2
+---
+
+Automatic reports after quarto compilations of the data aggregation scripts.
+
+-   `...`
+
+```{r, comment=""}
+fs::dir_tree()
+```

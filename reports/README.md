@@ -1,9 +1,9 @@
-# Scripts
+# Reports
 Sylvain Schmitt -
-Oct 15, 2024
+Oct 16, 2024
 
-This folder will contains all scripts for species all analyses. In
-particular:
+Automatic reports after quarto compilations of the data aggregation
+scripts.
 
 - `...`
 
