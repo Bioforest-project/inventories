@@ -1,6 +1,5 @@
 ---
-title: "All data"
-author: Sylvain Schmitt -
+title: "Figures"
 date: today
 date-format: medium
 format: 
@@ -9,9 +8,9 @@ format:
     toc-depth: 2
 ---
 
-This folder will contains the data for all anlayses. In particular:
+All figures (.png, .pdf, etc.):
 
--   `...`
+-   ...
 
 ```{r, comment=""}
 fs::dir_tree()

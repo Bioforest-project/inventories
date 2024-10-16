@@ -1,5 +1,5 @@
 # inventories
-Oct 15, 2024
+Oct 16, 2024
 
 [![](https://www.repostatus.org/badges/latest/wip.svg)](https://www.repostatus.org/#wip)
 [![lint](https://github.com/Bioforest-project/inventories/workflows/lint/badge.svg)](https://github.com/Bioforest-project/inventories/actions?query=workflow%3Alint)
@@ -24,16 +24,19 @@ that can be run with R and associated environment defined with
   - Reproductive analyses in `files.qmd`
   - Resulting pages in `docs/`
   - Document structure definition in `_quarto.yml`
-- Data in `data/`
+- Data in `data/` with:
+  - All raw data in `raw_data/`
+  - All derived data in `derived_sata/`
+- R and other scripts in `scripts/`
 - Intermediary files in `outputs/`
+- Figures in `figures/`
 - R environment definition with
   [renv](https://rstudio.github.io/renv/articles/renv.html) in `renv/`
   and `renv/lock`
 - R files (`.Rbuildignore` , `.Rdata` , `.Rprofile` , `.Rhistory`)
 - Git and GitHub files (`.gitignore` , `.github/`)
-- Project documentation (`README.qmd` , `README.md` , `NEWS.md` )
-
-> Should we add a license?
+- Project documentation (`README.qmd` , `README.md` , `NEWS.md`,
+  `LICENSE` )
 
 ## Contribution
 
@@ -46,7 +49,7 @@ the online document:
 ## Help
 
 Please preferentially create an issue on GitHub for any questions, bugs
-or help needed regarding **species**:
+or help needed regarding **inventories**:
 <https://github.com/Bioforest-project/inventories/issues> . You may
 however reach us by mail with people from the core group (see below).
 

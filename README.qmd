@@ -24,14 +24,16 @@ All **inventories** analyses rely on the quarto documents (`files.qmd`) that can
     -   Reproductive analyses in `files.qmd`
     -   Resulting pages in `docs/`
     -   Document structure definition in `_quarto.yml`
--   Data in `data/`
+-   Data in `data/` with:
+    -   All raw data in `raw_data/`
+    -   All derived data in `derived_sata/`
+-   R and other scripts in `scripts/`
 -   Intermediary files in `outputs/`
+-   Figures in `figures/`
 -   R environment definition with [renv](https://rstudio.github.io/renv/articles/renv.html) in `renv/` and `renv/lock`
 -   R files (`.Rbuildignore` , `.Rdata` , `.Rprofile` , `.Rhistory`)
 -   Git and GitHub files (`.gitignore` , `.github/`)
--   Project documentation (`README.qmd` , `README.md` , `NEWS.md` )
-
-> Should we add a license?
+-   Project documentation (`README.qmd` , `README.md` , `NEWS.md`, `LICENSE` )
 
 ## Contribution
 
@@ -39,7 +41,7 @@ You can contribute to the project by forking the repository on github and clonin
 
 ## Help
 
-Please preferentially create an issue on GitHub for any questions, bugs or help needed regarding **species**: <https://github.com/Bioforest-project/inventories/issues> . You may however reach us by mail with people from the core group (see below).
+Please preferentially create an issue on GitHub for any questions, bugs or help needed regarding **inventories**: <https://github.com/Bioforest-project/inventories/issues> . You may however reach us by mail with people from the core group (see below).
 
 ## Core group
 
