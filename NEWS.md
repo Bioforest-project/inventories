@@ -1,3 +1,4 @@
+-   inventories 0.1.0.9006: Mithila first share
 -   inventories 0.1.0.9005: mv appendices data_prep
 -   inventories 0.1.0.9004: inventory repo str test #6
 -   inventories 0.1.0.9003: new structure closer to R compendium

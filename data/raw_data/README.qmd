@@ -9,9 +9,9 @@ format:
     toc-depth: 2
 ---
 
-This folder will contains the raw data for all anlayses. In particular:
+This folder will contains the raw data for all analyses. In particular:
 
--   `...`
+-   `all_outptut_files`: all raw files after the data harmonization app.
 
 ```{r, comment=""}
 fs::dir_tree()
