@@ -7,6 +7,60 @@ format:
     colorlinks: true
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+library(data.table)
+library(BIOMASS)
+library(ggplot2)
+library(tidyverse)
+```
+
 # Introduction
 
-This is a dummy document for tests.
+-   what this code and document is for
+
+-   how to use it
+
+-   checklist of you need to do before running the script:
+
+    -   sign the data agreement
+
+    -   harmonize your dataset
+
+    - send species list (should already be ok)
+
+-   add plot-level information in this [document](google doc)
+
+# Check data consistency
+
+## All DBH above DBH cutoff and no NA values
+
+## No tree ID duplicates
+
+## Only one species per tree
+
+## Only one set of coordinates per tree
+
+## All trees within the plot
+
+
+# First step of data visualization
+
+- stem abundance by plot and census year
+
+- mean (or median) dbh by plot and census year
+
+- number of species
+
+# DBH corrections
+
+flowchart
+
+# Biodiversity metrics
+
+# Aboveground biomass
+
+
+
+
