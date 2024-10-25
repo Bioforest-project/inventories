@@ -5,6 +5,8 @@ format:
     toc: true
     number-sections: true
     colorlinks: true
+execute:
+  echo: false      
 ---
 
 ```{r setup, include=FALSE}
@@ -15,6 +17,10 @@ library(BIOMASS)
 library(ggplot2)
 library(tidyverse)
 ```
+
+<!-- TO DO
+* check why the chucks are displayed despite the echo: false instruction.
+--> 
 
 # Introduction
 
@@ -28,30 +34,90 @@ library(tidyverse)
 
     -   harmonize your dataset
 
-    - send species list (should already be ok)
+    -   send species list (should already be ok)
 
--   add plot-level information in this [document](google doc)
+-   add plot-level information in this [document](google%20doc)
+
+<!-- Load the data -->
+
+```{r load data}
+data_raw <- read.csv("data/raw_data/harmonized_data_misiones_v1.csv")
+# head(data_raw)
+# str(data_raw)
+```
+
+This document presents the data aggregation for the `r unique(data_raw$Site)`. This site had `r length(unique(data_raw$Plot))` plots: `r unique(data_raw$Plot)`.
+
+The following table shows the number of censuses per plots. 
+
+```{r censusNb}
+data_raw %>%
+  group_by(Plot) %>%
+  summarise(census_number = length(unique(IdCensus))) %>%
+  knitr::kable()
+```
+
+Censuses were conducted between `r min(data_raw$Year)` and `r max(data_raw$Year)`.
+
+*Please add a comment on question XXXX of the survey, if there are missing plots or censuses.*
 
 # Check data consistency
 
+This step checks for the absence of "anomalies" in the data.
+
 ## All DBH above DBH cutoff and no NA values
+
+<!--missing DBH-->
+
+```{r Na_DBH}
+if (anyNA(data_raw$Diameter)) {
+  nb_na_dbh <- sum(is.na(data_raw$Diameter))
+  perc_na_dbh <- round(sum(is.na(data_raw$Diameter))*100/dim(data_raw)[1], 2)
+  text <- paste ("There are", nb_na_dbh, "missing diameters in the data", "which represent", perc_na_dbh, "% of the observations. The missing values are distributed across the plots and censuses as follow:." ,sep=" ")
+} else {
+  text <- "There are no missing diameter in the data."
+}
+```
+
+`r text` 
+
+```{r explo_na_DBH}
+if (anyNA(data_raw$Diameter)) {
+  data_raw  %>% 
+    filter(is.na(Diameter)) %>%
+    count(Plot, IdCensus) %>% 
+    pivot_wider(names_from = IdCensus, values_from = n) %>%
+    knitr::kable()
+}
+```
+
+<!-- DBH below cutoff
+
+TO DO
+! the DBH cutoff may not be the same for all plots, and even not the same for all the inventories of a given plots, check for this first
+
+-->
+
+
 
 ## No tree ID duplicates
 
 ## Only one species per tree
 
-## Only one set of coordinates per tree
+## Only one set of coordinates per tree and no missing coordinates
 
 ## All trees within the plot
 
 
 # First step of data visualization
 
-- stem abundance by plot and census year
+-   stem abundance by plot and census year
 
-- mean (or median) dbh by plot and census year
+-   mean (or median) dbh by plot and census year
 
-- number of species
+-   number of species
+
+-   maps per plot and per census
 
 # DBH corrections
 
@@ -60,7 +126,3 @@ flowchart
 # Biodiversity metrics
 
 # Aboveground biomass
-
-
-
-
