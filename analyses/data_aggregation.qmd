@@ -164,6 +164,8 @@ if(dim(below_cut)[1]==0) {
 
 `r text`
 
+<!-- TO DO : DELETE THE TREE BELOW CUTOFF-->
+
 ## No tree ID duplicates
 
 ## Only one species per tree
