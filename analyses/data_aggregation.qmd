@@ -50,7 +50,8 @@ data_raw <- read.csv("data/raw_data/harmonized_data_mbaiki_v1.csv")
 
 # General presentation of the data
 
-This document presents the data aggregation for the `r unique(data_raw$Site)`. This site had `r length(unique(data_raw$Plot))` plots: `r unique(data_raw$Plot)`.
+This document presents the data aggregation for the `r unique(data_raw$Site)`. 
+This site had `r length(unique(data_raw$Plot))` plots: `r unique(data_raw$Plot)`.
 
 It has `r dim(data_raw)[1]` observations, belonging to `r length(unique(data_raw$IdStem))` stems.
 
@@ -115,9 +116,9 @@ if (length(unique(data_raw$MinDBH)) == 1) {
   )
 } else {
   # count the number of cutoff per plot and census
-  data_raw %>%
+  cutoff_plot_cens <- data_raw %>%
     group_by(Plot, IdCensus) %>%
-    summarise(cutoff = length(unique(MinDBH))) -> cutoff_plot_cens
+    summarise(cutoff = length(unique(MinDBH)))
   if (length(unique(cutoff_plot_cens$cutoff)) != 1) {
     text <- "There is more than one DBH cutoff per plot and per census.
     This is a problem, please check the data."
@@ -146,15 +147,15 @@ if (length(unique(data_raw$MinDBH)) != 1) {
 ## All trees above the DBH cutoff
 
 ```{r abovecutoff}
-data_raw %>%
+below_cut <- data_raw %>%
   filter(Diameter < MinDBH) %>%
-  select(MinDBH, IdCensus, Plot, Diameter) -> below_cut
+  select(MinDBH, IdCensus, Plot, Diameter)
 if (dim(below_cut)[1] == 0) {
   text <- "There are no stems with a DBH below the DBH cutoff."
   data_cor <- data_raw
 } else {
-  below_cut %>%
-    mutate(DBHDiff = MinDBH - Diameter) -> below_cut
+  below_cut <- below_cut %>%
+    mutate(DBHDiff = MinDBH - Diameter)
   data_cor <- data_raw %>% filter(Diameter >= MinDBH)
   text <- paste("There are ",
     dim(below_cut)[1],
@@ -184,29 +185,29 @@ if (dim(below_cut)[1] == 0) {
 
 # make a dummy data_set to test
 dupl <- slice_sample(data_cor, n = 15) # some duplicated
-dupl %>%
+dupl <- dupl %>%
   mutate(Diameter = replace(
     Diameter, IdStem == dupl$IdStem[1],
     dupl$Diameter[1] + 10
-  )) -> dupl # one duplicated with different DBH
+  )) # one duplicated with different DBH
 data_cor <- rbind(data_cor, dupl)
 data_cor <- rbind(data_cor, slice_sample(dupl, n = 3)) # some duplicated twice
-data_cor %>%
+dupl_sev_census <- data_cor %>%
   filter(IdStem == dupl$IdStem[2]) %>%
-  slice_sample(, n = 2) -> dupl_sev_census # one IDstem with several duplicated censuses
+  slice_sample(, n = 2) # one IDstem with several duplicated censuses
 data_cor <- rbind(data_cor, dupl_sev_census)
 ```
 
 
 ```{r nostemID_duplicate}
-data_cor %>%
-  count(IdStem, IdCensus) -> nb_stem_plot
+nb_stem_plot <- data_cor %>%
+  count(IdStem, IdCensus)
 
 if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
   text <- "There is no duplicated stem identifiers within a same census."
 } else {
-  nb_stem_plot %>%
-    filter(n > 1) -> stem_dupli
+  stem_dupli <- nb_stem_plot %>%
+    filter(n > 1)
   text <- paste("There are ",
     dim(stem_dupli)[1],
     " cases of duplicated stem identifiers within a same census,",
@@ -229,7 +230,7 @@ if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
 ```{r rmv_full_duplicate}
 if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
   prev_nb_obs <- dim(data_cor)[1]
-  data_cor %>% distinct() -> data_cor # remove fully duplicated rows
+  data_cor <- data_cor %>% distinct() # remove fully duplicated rows
   if (prev_nb_obs - dim(data_cor)[1] != 0) { # if there were some fully duplicated rows
     text <- paste(
       prev_nb_obs - dim(data_cor)[1],
@@ -241,8 +242,8 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
   } else {
     text <- ""
   }
-  data_cor %>%
-    count(IdStem, IdCensus) -> nb_stem_plot_bis
+  nb_stem_plot_bis <- data_cor %>%
+    count(IdStem, IdCensus)
 } else { # if no duplicated rows
   text <- ""
 }
@@ -256,8 +257,8 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
     text <- "There is no more duplicated stem identifiers within a same census."
     still_stem_dupli <- FALSE
   } else {
-    nb_stem_plot_bis %>%
-      filter(n > 1) -> stem_dupli_bis
+    stem_dupli_bis <- nb_stem_plot_bis %>%
+      filter(n > 1)
     text <- paste(
       "There are still",
       dim(stem_dupli_bis)[1],
@@ -353,9 +354,11 @@ if (anyNA(data_cor$ScientificName)) {
 
 This step adds two columns to the dataset:
 
-- ScientificName_cor : corrected scientific name, see SpName_codecor to know how it was filled. 
+- ScientificName_cor : corrected scientific name, see SpName_codecor 
+to know how it was filled. 
 
-<!-- To discuss : it would be worth it gapfilling the scientific name when some obs are indet. as well,
+<!-- To discuss : it would be worth it gapfilling the scientific name 
+when some obs are indet. as well,
 But I don't know if the Inded are always coded the same, and how...-->
 
 - SpName_codecor : the type of correction that has been done: 
@@ -371,7 +374,7 @@ But I don't know if the Inded are always coded the same, and how...-->
     all observations of the given individuals are set to NA. 
     
 ```{r dummy_Sp_dupl}
-#| eval: false
+#| eval: true
 
 # create a dummy dataset to test (works for Mbaiki but probably not for all)
 set.seed(55)
@@ -421,7 +424,8 @@ data_cor <- data_cor %>%
     values = "Blo blobblo"
   ))
 # data_cor %>%
-#   filter(ScientificName %in% c("Bla blabbla", "Bli blibbli", "Blu blubblu", "Blo blobblo")) %>%
+#   filter(ScientificName %in% c("Bla blabbla", "Bli blibbli", 
+# "Blu blubblu", "Blo blobblo")) %>%
 #   select(IdTree)
 ```
     
