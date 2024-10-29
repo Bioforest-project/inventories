@@ -165,7 +165,7 @@ if (dim(below_cut)[1] == 0) {
     round(min(below_cut$DBHDiff), 2), " cm and ",
     round(max(below_cut$DBHDiff), 2),
     " cm, with a median value of ",
-    round(median(below_cut$DBHDiff), 2), 
+    round(median(below_cut$DBHDiff), 2),
     "cm. These observations are removed, leaving a dataset of ",
     dim(data_cor)[1],
     " observations.",
@@ -183,16 +183,18 @@ if (dim(below_cut)[1] == 0) {
 #| eval: false
 
 # make a dummy data_set to test
-dupl <- slice_sample(data_cor, n=15) # some duplicated
+dupl <- slice_sample(data_cor, n = 15) # some duplicated
 dupl %>%
-   mutate(Diameter=replace(Diameter, IdStem==dupl$IdStem[1],
-                           dupl$Diameter[1]+10)) -> dupl # one duplicated with different DBH
+  mutate(Diameter = replace(
+    Diameter, IdStem == dupl$IdStem[1],
+    dupl$Diameter[1] + 10
+  )) -> dupl # one duplicated with different DBH
 data_cor <- rbind(data_cor, dupl)
-data_cor <- rbind(data_cor, slice_sample(dupl, n=3)) # some duplicated twice
-data_cor %>% filter(IdStem == dupl$IdStem[2]) %>%
-  slice_sample(, n=2) -> dupl_sev_census  # one IDstem with several duplicated censuses
+data_cor <- rbind(data_cor, slice_sample(dupl, n = 3)) # some duplicated twice
+data_cor %>%
+  filter(IdStem == dupl$IdStem[2]) %>%
+  slice_sample(, n = 2) -> dupl_sev_census # one IDstem with several duplicated censuses
 data_cor <- rbind(data_cor, dupl_sev_census)
-
 ```
 
 
@@ -292,8 +294,8 @@ if (still_stem_dupli == TRUE) {
 
 ```{r nbstemID}
 if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
-  text <- "The number of stem identifiers and the number of tree identifiers are equal, 
-  suggesting either that there are no multi-stemmed trees, 
+  text <- "The number of stem identifiers and the number of tree identifiers are equal,
+  suggesting either that there are no multi-stemmed trees,
   or that the multiple stems are considered
   as different individuals."
 } else {
@@ -372,52 +374,55 @@ But I don't know if the Inded are always coded the same, and how...-->
 #| eval: false
 
 # create a dummy dataset to test (works for Mbaiki but probably not for all)
-  set.seed(55)
-  # add a different species names for one census of a tree with NA in ScientificName
-    sample_temp <- data_cor %>% 
-      filter(is.na(ScientificName)) %>% 
-      slice_sample(, n=1) %>%
-      select(IdCensus, IdStem)
-    data_cor <- data_cor %>%
-      mutate(ScientificName = replace(ScientificName, 
-                                      (IdCensus == sample_temp$IdCensus & 
-                                         IdStem == sample_temp$IdStem),
-                                      values= "Bla blabbla"))
-  # add a different species names for one census of a tree with not an NA in ScientificName
-    sample_temp2 <- data_cor %>% 
-      filter(!(is.na(ScientificName))) %>% 
-      slice_sample(, n=1) %>%
-      select(IdCensus, IdStem)
-    data_cor <- data_cor %>%
-      mutate(ScientificName = replace(ScientificName, 
-                                      (IdCensus == sample_temp2$IdCensus & 
-                                         IdStem == sample_temp2$IdStem),
-                                      values= "Bli blibbli"))
-  # add two differents species names for a tree that is not NA (so will have 3 species names in total)
-    sampleInd <- data_cor %>%
-      filter(!(is.na(ScientificName))) %>% 
-      select(IdTree) %>%
-      sample_n(, size = 1) %>%
-      as.numeric()
-    sampleCens <- data_cor %>% 
-      filter(IdTree == sampleInd) %>%
-      select(IdCensus) %>%
-      sample_n(, size = 2) %>%
-      as.vector()
-    data_cor <- data_cor %>%
-      mutate(ScientificName = replace(ScientificName, 
-                                      (IdCensus == sampleCens$IdCensus[1] & 
-                                         IdTree == sampleInd),
-                                      values= "Blu blubblu"))
-    data_cor <- data_cor %>%
-      mutate(ScientificName = replace(ScientificName, 
-                                      (IdCensus == sampleCens$IdCensus[2] & 
-                                         IdTree == sampleInd),
-                                      values= "Blo blobblo"))
-    # data_cor %>% 
-    #   filter(ScientificName %in% c("Bla blabbla", "Bli blibbli", "Blu blubblu", "Blo blobblo")) %>%
-    #   select(IdTree)
-    
+set.seed(55)
+# add a different species names for one census of a tree with NA in ScientificName
+sample_temp <- data_cor %>%
+  filter(is.na(ScientificName)) %>%
+  slice_sample(, n = 1) %>%
+  select(IdCensus, IdStem)
+data_cor <- data_cor %>%
+  mutate(ScientificName = replace(ScientificName,
+    (IdCensus == sample_temp$IdCensus &
+      IdStem == sample_temp$IdStem),
+    values = "Bla blabbla"
+  ))
+# add a different species names for one census of a tree with not an NA in ScientificName
+sample_temp2 <- data_cor %>%
+  filter(!(is.na(ScientificName))) %>%
+  slice_sample(, n = 1) %>%
+  select(IdCensus, IdStem)
+data_cor <- data_cor %>%
+  mutate(ScientificName = replace(ScientificName,
+    (IdCensus == sample_temp2$IdCensus &
+      IdStem == sample_temp2$IdStem),
+    values = "Bli blibbli"
+  ))
+# add two differents species names for a tree that is not NA (so will have 3 species names in total)
+sampleInd <- data_cor %>%
+  filter(!(is.na(ScientificName))) %>%
+  select(IdTree) %>%
+  sample_n(, size = 1) %>%
+  as.numeric()
+sampleCens <- data_cor %>%
+  filter(IdTree == sampleInd) %>%
+  select(IdCensus) %>%
+  sample_n(, size = 2) %>%
+  as.vector()
+data_cor <- data_cor %>%
+  mutate(ScientificName = replace(ScientificName,
+    (IdCensus == sampleCens$IdCensus[1] &
+      IdTree == sampleInd),
+    values = "Blu blubblu"
+  ))
+data_cor <- data_cor %>%
+  mutate(ScientificName = replace(ScientificName,
+    (IdCensus == sampleCens$IdCensus[2] &
+      IdTree == sampleInd),
+    values = "Blo blobblo"
+  ))
+# data_cor %>%
+#   filter(ScientificName %in% c("Bla blabbla", "Bli blibbli", "Blu blubblu", "Blo blobblo")) %>%
+#   select(IdTree)
 ```
     
 
@@ -426,106 +431,127 @@ nb_sp_tree <- data_cor %>%
   group_by(IdTree) %>%
   summarise(nbsp = length(unique(ScientificName)))
 
-data_cor <- data_cor %>% mutate(ScientificName_cor = as.character(NA),
-                                SpName_codecor = as.factor(NA))
+data_cor <- data_cor %>% mutate(
+  ScientificName_cor = as.character(NA),
+  SpName_codecor = as.factor(NA)
+)
 
 # when there is just one scientific name for all the observation of a given tree
-   tree_no_cor <- nb_sp_tree %>% filter(nbsp == 1) 
-   # use the ScientificNames as the corrected one
-   data_cor <- data_cor %>% 
-     mutate(ScientificName_cor = ifelse(IdTree %in% tree_no_cor$IdTree, 
-                                        ScientificName,
-                                        ScientificName_cor))
-   # fill in the code_cor 
-   data_cor <- data_cor %>% 
-     mutate(SpName_codecor = ifelse(IdTree %in% tree_no_cor$IdTree, 
-                                        "no_cor",
-                                        SpName_codecor))
-   
+tree_no_cor <- nb_sp_tree %>% filter(nbsp == 1)
+# use the ScientificNames as the corrected one
+data_cor <- data_cor %>%
+  mutate(ScientificName_cor = ifelse(IdTree %in% tree_no_cor$IdTree,
+    ScientificName,
+    ScientificName_cor
+  ))
+# fill in the code_cor
+data_cor <- data_cor %>%
+  mutate(SpName_codecor = ifelse(IdTree %in% tree_no_cor$IdTree,
+    "no_cor",
+    SpName_codecor
+  ))
+
 # When there are two scientific names
-   tree_2_sp <- nb_sp_tree %>% filter(nbsp == 2) 
-   for (i in tree_2_sp$IdTree) {
-     names2 <- data_cor %>% filter(IdTree == i) %>% 
-       reframe(names = unique(ScientificName)) 
-     if(any(is.na(names2))) { # if one of the two names is NA
-       data_cor <- data_cor %>% 
-         mutate(ScientificName_cor = ifelse(IdTree == i, 
-                                            ifelse(
-                                              is.na(ScientificName), # if NA in Scientific name
-                                              names2[!is.na(names2)], # we use the name of the other obs
-                                              ScientificName), # otherwise, use the name of the current obs
-                                            ScientificName_cor)) # do nothing if not the tree of interest
-       # fill in the code_cor
-       data_cor <- data_cor %>% 
-         mutate(SpName_codecor = ifelse(IdTree == i, 
-                                        ifelse(
-                                          is.na(ScientificName), # if NA in Scientific name
-                                          "gapfilled",
-                                          "no_cor"), 
-                                        SpName_codecor)) # do nothing if not the tree of interest
-     } else { # if none of the two names are NA
-       data_cor <- data_cor %>% 
-         mutate(ScientificName_cor = ifelse(IdTree == i, 
-                                        NA, # put NA as we don't know which one is the good one
-                                        ScientificName_cor))
-       # fill in the code_cor 
-       data_cor <- data_cor %>% 
-         mutate(SpName_codecor = ifelse(IdTree == i, 
-                                        "more than one scientific name",
-                                        SpName_codecor))
-     }
-   }
-     
+tree_2_sp <- nb_sp_tree %>% filter(nbsp == 2)
+for (i in tree_2_sp$IdTree) {
+  names2 <- data_cor %>%
+    filter(IdTree == i) %>%
+    reframe(names = unique(ScientificName))
+  if (any(is.na(names2))) { # if one of the two names is NA
+    data_cor <- data_cor %>%
+      mutate(ScientificName_cor = ifelse(IdTree == i,
+        ifelse(
+          is.na(ScientificName), # if NA in Scientific name
+          names2[!is.na(names2)], # we use the name of the other obs
+          ScientificName
+        ), # otherwise, use the name of the current obs
+        ScientificName_cor
+      )) # do nothing if not the tree of interest
+    # fill in the code_cor
+    data_cor <- data_cor %>%
+      mutate(SpName_codecor = ifelse(IdTree == i,
+        ifelse(
+          is.na(ScientificName), # if NA in Scientific name
+          "gapfilled",
+          "no_cor"
+        ),
+        SpName_codecor
+      )) # do nothing if not the tree of interest
+  } else { # if none of the two names are NA
+    data_cor <- data_cor %>%
+      mutate(ScientificName_cor = ifelse(IdTree == i,
+        NA, # put NA as we don't know which one is the good one
+        ScientificName_cor
+      ))
+    # fill in the code_cor
+    data_cor <- data_cor %>%
+      mutate(SpName_codecor = ifelse(IdTree == i,
+        "more than one scientific name",
+        SpName_codecor
+      ))
+  }
+}
+
 # when there are more than two scientific name for a given tree
-   tree_many_sp <- nb_sp_tree %>% filter(nbsp > 2) 
-   # replace the name by NA (as we don't know which one is the good one
-   data_cor <- data_cor %>% 
-     mutate(ScientificName_cor = ifelse(IdTree %in% tree_many_sp, 
-                                        NA,
-                                        ScientificName_cor))
-   # fill in the code_cor 
-   data_cor <- data_cor %>% 
-     mutate(SpName_codecor = ifelse(IdTree %in% tree_many_sp, 
-                                        "more than one scientific name",
-                                        SpName_codecor))
+tree_many_sp <- nb_sp_tree %>% filter(nbsp > 2)
+# replace the name by NA (as we don't know which one is the good one
+data_cor <- data_cor %>%
+  mutate(ScientificName_cor = ifelse(IdTree %in% tree_many_sp,
+    NA,
+    ScientificName_cor
+  ))
+# fill in the code_cor
+data_cor <- data_cor %>%
+  mutate(SpName_codecor = ifelse(IdTree %in% tree_many_sp,
+    "more than one scientific name",
+    SpName_codecor
+  ))
 ```
 
 
 
 ```{r textSPdupl}
 if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
-  text <- "There was always only one scientific name for a given individual 
-  (or always a NA). No change has been made. 
-  The value is ScientificName_cor is the same than in ScientificName, 
+  text <- "There was always only one scientific name for a given individual
+  (or always a NA). No change has been made.
+  The value is ScientificName_cor is the same than in ScientificName,
   and SpName_codecor is always 'no_cor'"
 } else { # if some correction have been made
-  nb_filled <- data_cor %>% filter(SpName_codecor == "gapfilled") %>% count()
-  nb_prob <- data_cor %>% filter(SpName_codecor == "more than one scientific name") %>% count()
-  if(nb_filled != 0) {
-    text1 <- paste("There were", 
-                   nb_filled,
-                   "observations with NA in the ScientificName, 
-                   but for which other observations of the same trees 
+  nb_filled <- data_cor %>%
+    filter(SpName_codecor == "gapfilled") %>%
+    count()
+  nb_prob <- data_cor %>%
+    filter(SpName_codecor == "more than one scientific name") %>%
+    count()
+  if (nb_filled != 0) {
+    text1 <- paste(
+      "There were",
+      nb_filled,
+      "observations with NA in the ScientificName,
+                   but for which other observations of the same trees
                    have a unique ScientificName.
                    These case were gapfilled but putting the scientific name
                    of the other observations in ScientificName_cor. The
-                   value in SpName_codecor is 'gapfilled'.")
+                   value in SpName_codecor is 'gapfilled'."
+    )
   } else {
     text1 <- ""
-    }
-  if(nb_prob != 0) {
-    text2 <- paste("There were", 
-                   nb_prob,
-                   "observations of individuals with at least 2 different (non NA) 
-                   scientific names. 
+  }
+  if (nb_prob != 0) {
+    text2 <- paste(
+      "There were",
+      nb_prob,
+      "observations of individuals with at least 2 different (non NA)
+                   scientific names.
                    As we cannot know which is correct,
                    all observations of the given individuals are set to NA.
-                   The value in SpName_codecor is 'more than one scientific name.`")
-    } else {
-      text2 <- ""
-    }
-  text <- paste(text1, "\n", text2)
+                   The value in SpName_codecor is 'more than one scientific name.`"
+    )
+  } else {
+    text2 <- ""
   }
+  text <- paste(text1, "\n", text2)
+}
 ```
 
 `r text`
