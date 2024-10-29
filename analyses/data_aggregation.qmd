@@ -146,7 +146,7 @@ data_raw %>%
   filter(Diameter < MinDBH) %>%
   select(MinDBH, IdCensus, Plot, Diameter) -> below_cut
 if(dim(below_cut)[1]==0) {
-  text <- "There are no tree with a DBH below the DBH cutoff."
+  text <- "There are no stems with a DBH below the DBH cutoff."
   data <- data_raw
 } else {
   below_cut %>% 
@@ -177,13 +177,13 @@ if(dim(below_cut)[1]==0) {
 ```{r nostemID_duplicate}
 # make a dummy data_set to test
   # dupl <- slice_sample(data_cor, n=15) # some duplicated
-  # dupl %>% 
-  #    mutate(Diameter=replace(Diameter, IdStem==dupl$IdStem[1], 
+  # dupl %>%
+  #    mutate(Diameter=replace(Diameter, IdStem==dupl$IdStem[1],
   #                            dupl$Diameter[1]+10)) -> dupl # one duplicated with different DBH
   # data_cor <- rbind(data_cor, dupl)
   # data_cor <- rbind(data_cor, slice_sample(dupl, n=3)) # some duplicated twice
-  # data_cor %>% filter(IdStem == dupl$IdStem[2]) %>% 
-  #   slice_sample(, n=2) -> dupl_sev_census  # one IDstem with several duplicated censuses 
+  # data_cor %>% filter(IdStem == dupl$IdStem[2]) %>%
+  #   slice_sample(, n=2) -> dupl_sev_census  # one IDstem with several duplicated censuses
   # data_cor <- rbind(data_cor, dupl_sev_census)
   
 data_cor %>%
@@ -245,7 +245,7 @@ if(length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
   text <- paste("There are still",
                 dim(stem_dupli_bis)[1],
                 "cases of duplicated stem identifiers within a same census,",
-                "with are not fully replicated rows.",
+                "which are not fully replicated rows.",
                 "This concern the following cases:")
   still_stem_dupli <- TRUE
   }
