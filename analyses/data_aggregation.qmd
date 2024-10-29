@@ -77,13 +77,15 @@ This step checks for the absence of "anomalies" in the data.
 ```{r Na_DBH}
 if (anyNA(data_raw$Diameter)) {
   nb_na_dbh <- sum(is.na(data_raw$Diameter))
-  perc_na_dbh <- round(sum(is.na(data_raw$Diameter)) * 100 / dim(data_raw)[1], 2)
+  perc_na_dbh <- round(sum(is.na(data_raw$Diameter)) *
+    100 / dim(data_raw)[1], 2)
   text <- paste("There are",
     nb_na_dbh,
     "missing diameters in the data, which represent",
     perc_na_dbh,
     "% of the observations.
-    The missing values are distributed across the plots and censuses as follow:",
+    The missing values are distributed across
+    the plots and censuses as follow:",
     sep = " "
   )
 } else {
@@ -231,11 +233,13 @@ if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
 if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
   prev_nb_obs <- dim(data_cor)[1]
   data_cor <- data_cor %>% distinct() # remove fully duplicated rows
-  if (prev_nb_obs - dim(data_cor)[1] != 0) { # if there were some fully duplicated rows
+  if (prev_nb_obs - dim(data_cor)[1] != 0) { # if there
+    # were some fully duplicated rows
     text <- paste(
       prev_nb_obs - dim(data_cor)[1],
       "rows are true duplicates (fully identical rows).",
-      "These true duplicates are removed from the dataset, leaving a dataset of ",
+      "These true duplicates are removed from the dataset,
+      leaving a dataset of ",
       dim(data_cor)[1],
       " observations."
     )
@@ -253,8 +257,12 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 
 ```{r non_full_duplicates}
 if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
-  if (all(length(unique(nb_stem_plot_bis$n)) == 1, unique(nb_stem_plot_bis$n) == 1)) {
-    text <- "There is no more duplicated stem identifiers within a same census."
+  if (all(
+    length(unique(nb_stem_plot_bis$n)) == 1,
+    unique(nb_stem_plot_bis$n) == 1
+  )) {
+    text <- "There is no more duplicated stem
+    dentifiers within a same census."
     still_stem_dupli <- FALSE
   } else {
     stem_dupli_bis <- nb_stem_plot_bis %>%
@@ -283,7 +291,8 @@ if (still_stem_dupli == TRUE) {
 
 ```{r warn_still_duplicate}
 if (still_stem_dupli == TRUE) {
-  text <- "IMPORTANT: Please check this cases in your raw data before starting the process again."
+  text <- "IMPORTANT: Please check this cases
+  in your raw data before starting the process again."
 } else {
   text <- ""
 }
@@ -295,7 +304,8 @@ if (still_stem_dupli == TRUE) {
 
 ```{r nbstemID}
 if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
-  text <- "The number of stem identifiers and the number of tree identifiers are equal,
+  text <- "The number of stem identifiers
+  and the number of tree identifiers are equal,
   suggesting either that there are no multi-stemmed trees,
   or that the multiple stems are considered
   as different individuals."
@@ -317,7 +327,8 @@ if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
 ```{r na_sp}
 if (anyNA(data_cor$ScientificName)) {
   nb_na_sp <- sum(is.na(data_cor$ScientificName))
-  perc_na_sp <- round(sum(is.na(data_cor$ScientificName)) * 100 / dim(data_cor)[1], 2)
+  perc_na_sp <- round(sum(is.na(data_cor$ScientificName)) *
+    100 / dim(data_cor)[1], 2)
   nb_na_sp_tree <- data_cor %>%
     filter(is.na(ScientificName)) %>%
     summarise((length(unique(IdTree))))
@@ -334,7 +345,8 @@ if (anyNA(data_cor$ScientificName)) {
     sep = " "
   )
 } else {
-  text <- "There are no observations with NAs in the scientific names in the data."
+  text <- "There are no observations with NAs
+  in the scientific names in the data."
 }
 ```
 
@@ -378,7 +390,8 @@ But I don't know if the Inded are always coded the same, and how...-->
 
 # create a dummy dataset to test (works for Mbaiki but probably not for all)
 set.seed(55)
-# add a different species names for one census of a tree with NA in ScientificName
+# add a different species names for one census
+# of a tree with NA in ScientificName
 sample_temp <- data_cor %>%
   filter(is.na(ScientificName)) %>%
   slice_sample(, n = 1) %>%
@@ -389,7 +402,8 @@ data_cor <- data_cor %>%
       IdStem == sample_temp$IdStem),
     values = "Bla blabbla"
   ))
-# add a different species names for one census of a tree with not an NA in ScientificName
+# add a different species names for one census
+# of a tree with not an NA in ScientificName
 sample_temp2 <- data_cor %>%
   filter(!(is.na(ScientificName))) %>%
   slice_sample(, n = 1) %>%
@@ -400,7 +414,8 @@ data_cor <- data_cor %>%
       IdStem == sample_temp2$IdStem),
     values = "Bli blibbli"
   ))
-# add two differents species names for a tree that is not NA (so will have 3 species names in total)
+# add two differents species names for a tree that
+# is not NA (so will have 3 species names in total)
 sampleInd <- data_cor %>%
   filter(!(is.na(ScientificName))) %>%
   select(IdTree) %>%
@@ -424,7 +439,7 @@ data_cor <- data_cor %>%
     values = "Blo blobblo"
   ))
 # data_cor %>%
-#   filter(ScientificName %in% c("Bla blabbla", "Bli blibbli", 
+#   filter(ScientificName %in% c("Bla blabbla", "Bli blibbli",
 # "Blu blubblu", "Blo blobblo")) %>%
 #   select(IdTree)
 ```
@@ -549,7 +564,8 @@ if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
                    scientific names.
                    As we cannot know which is correct,
                    all observations of the given individuals are set to NA.
-                   The value in SpName_codecor is 'more than one scientific name.`"
+                   The value in SpName_codecor
+      is 'more than one scientific name.`"
     )
   } else {
     text2 <- ""
