@@ -76,13 +76,14 @@ This step checks for the absence of "anomalies" in the data.
 if (anyNA(data_raw$Diameter)) {
   nb_na_dbh <- sum(is.na(data_raw$Diameter))
   perc_na_dbh <- round(sum(is.na(data_raw$Diameter)) * 100 / dim(data_raw)[1], 2)
-  text <- paste("There are", 
-                nb_na_dbh, 
-                "missing diameters in the data", "which represent",
-                perc_na_dbh, 
-                "% of the observations. 
-                The missing values are distributed across the plots
-                and censuses as follow:.", sep=" ")
+  text <- paste("There are",
+    nb_na_dbh,
+    "missing diameters in the data, which represent",
+    perc_na_dbh,
+    "% of the observations.
+    The missing values are distributed across the plots and censuses as follow:.",
+    sep = " "
+  )
 } else {
   text <- "There are no missing diameter in the data."
 }
@@ -92,7 +93,7 @@ if (anyNA(data_raw$Diameter)) {
 
 ```{r explo_na_DBH}
 if (anyNA(data_raw$Diameter)) {
-  data_raw  %>%
+  data_raw %>%
     filter(is.na(Diameter)) %>%
     count(Plot, IdCensus) %>%
     pivot_wider(names_from = Plot, values_from = n) %>%
@@ -103,18 +104,20 @@ if (anyNA(data_raw$Diameter)) {
 ## DBH cutoff 
 
 ```{r DBHcutoff}
-#| message: false 
+#| message: false
 #| warning: false
-if(length(unique(data_raw$MinDBH))==1) {
-  text <- paste("There is a single DBH cutoff set to", 
-                unique(data_raw$MinDBH),
-                "for the whole data set.") 
+if (length(unique(data_raw$MinDBH)) == 1) {
+  text <- paste(
+    "There is a single DBH cutoff set to",
+    unique(data_raw$MinDBH),
+    "for the whole data set."
+  )
 } else {
-  #count the number of cutoff per plot and census
-    data_raw  %>%
-      group_by(Plot, IdCensus) %>%
-      summarise(cutoff = length(unique(MinDBH))) -> cutoff_plot_cens
-  if(length(unique(cutoff_plot_cens$cutoff))!=1) {
+  # count the number of cutoff per plot and census
+  data_raw %>%
+    group_by(Plot, IdCensus) %>%
+    summarise(cutoff = length(unique(MinDBH))) -> cutoff_plot_cens
+  if (length(unique(cutoff_plot_cens$cutoff)) != 1) {
     text <- "There is more than one DBH cutoff per plot and per census.
     This is a problem, please check the data."
   } else {
@@ -126,15 +129,15 @@ if(length(unique(data_raw$MinDBH))==1) {
 `r text`
 
 ```{r display_cutoff}
-#| message: false 
+#| message: false
 #| warning: false
-if(length(unique(data_raw$MinDBH))!=1) {
-  if(length(unique(cutoff_plot_cens$cutoff))==1) {
-  data_raw  %>%
-    group_by(Plot, IdCensus) %>%
-    summarise(dbhcut = unique(MinDBH)) %>%
-    pivot_wider(names_from = Plot, values_from = dbhcut) %>%
-    knitr::kable() 
+if (length(unique(data_raw$MinDBH)) != 1) {
+  if (length(unique(cutoff_plot_cens$cutoff)) == 1) {
+    data_raw %>%
+      group_by(Plot, IdCensus) %>%
+      summarise(dbhcut = unique(MinDBH)) %>%
+      pivot_wider(names_from = Plot, values_from = dbhcut) %>%
+      knitr::kable()
   }
 }
 ```
@@ -145,27 +148,28 @@ if(length(unique(data_raw$MinDBH))!=1) {
 data_raw %>%
   filter(Diameter < MinDBH) %>%
   select(MinDBH, IdCensus, Plot, Diameter) -> below_cut
-if(dim(below_cut)[1]==0) {
+if (dim(below_cut)[1] == 0) {
   text <- "There are no stems with a DBH below the DBH cutoff."
   data <- data_raw
 } else {
-  below_cut %>% 
+  below_cut %>%
     mutate(DBHDiff = MinDBH - Diameter) -> below_cut
   data_cor <- data_raw %>% filter(Diameter >= MinDBH)
   text <- paste("There are ",
-                dim(below_cut)[1],
-                " observations of stems with a DBH below the DBH cutoff (",
-                round(dim(below_cut)[1] *100 / dim(data_raw)[1],1),
-                "%). For these observations, the difference between 
+    dim(below_cut)[1],
+    " observations of stems with a DBH below the DBH cutoff (",
+    round(dim(below_cut)[1] * 100 / dim(data_raw)[1], 1),
+    "%). For these observations, the difference between
                 the DBH and the cutoff ranges between ",
-                round(min(below_cut$DBHDiff), 2), " cm and ", 
-                round(max(below_cut$DBHDiff), 2),
-                " cm, with a median value of ",
-                round(median(below_cut$DBHDiff),2), "cm.
+    round(min(below_cut$DBHDiff), 2), " cm and ",
+    round(max(below_cut$DBHDiff), 2),
+    " cm, with a median value of ",
+    round(median(below_cut$DBHDiff), 2), "cm.
                 These observations are removed, leaving a dataset of ",
-                dim(data_cor)[1],
-                " observations.",
-                sep="")
+    dim(data_cor)[1],
+    " observations.",
+    sep = ""
+  )
 }
 ```
 
@@ -176,78 +180,83 @@ if(dim(below_cut)[1]==0) {
 
 ```{r nostemID_duplicate}
 # make a dummy data_set to test
-  # dupl <- slice_sample(data_cor, n=15) # some duplicated
-  # dupl %>%
-  #    mutate(Diameter=replace(Diameter, IdStem==dupl$IdStem[1],
-  #                            dupl$Diameter[1]+10)) -> dupl # one duplicated with different DBH
-  # data_cor <- rbind(data_cor, dupl)
-  # data_cor <- rbind(data_cor, slice_sample(dupl, n=3)) # some duplicated twice
-  # data_cor %>% filter(IdStem == dupl$IdStem[2]) %>%
-  #   slice_sample(, n=2) -> dupl_sev_census  # one IDstem with several duplicated censuses
-  # data_cor <- rbind(data_cor, dupl_sev_census)
-  
-data_cor %>%
-  count(IdStem, IdCensus) -> nb_stem_plot 
+# dupl <- slice_sample(data_cor, n=15) # some duplicated
+# dupl %>%
+#    mutate(Diameter=replace(Diameter, IdStem==dupl$IdStem[1],
+#                            dupl$Diameter[1]+10)) -> dupl # one duplicated with different DBH
+# data_cor <- rbind(data_cor, dupl)
+# data_cor <- rbind(data_cor, slice_sample(dupl, n=3)) # some duplicated twice
+# data_cor %>% filter(IdStem == dupl$IdStem[2]) %>%
+#   slice_sample(, n=2) -> dupl_sev_census  # one IDstem with several duplicated censuses
+# data_cor <- rbind(data_cor, dupl_sev_census)
 
-if(all(length(unique(nb_stem_plot$n)) == 1 , unique(nb_stem_plot$n) == 1)) {
+data_cor %>%
+  count(IdStem, IdCensus) -> nb_stem_plot
+
+if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
   text <- "There is no duplicated stem identifiers within a same census."
 } else {
   nb_stem_plot %>%
-    filter(n>1) ->  stem_dupli
+    filter(n > 1) -> stem_dupli
   text <- paste("There are ",
-                dim(stem_dupli)[1],
-                " cases of duplicated stem identifiers within a same census,",
-                " with a number of duplications ranging from ",
-                stem_dupli %>% summarise(min(n)), 
-                " and ",
-                stem_dupli %>% summarise(max(n)), 
-                " (mean = ",
-                stem_dupli %>% summarise(round(mean(n),2)),
-                "). These duplications concern ",
-                length(unique(stem_dupli$IdStem)),
-                " stems.", 
-                sep="")
+    dim(stem_dupli)[1],
+    " cases of duplicated stem identifiers within a same census,",
+    " with a number of duplications ranging from ",
+    stem_dupli %>% summarise(min(n)),
+    " and ",
+    stem_dupli %>% summarise(max(n)),
+    " (mean = ",
+    stem_dupli %>% summarise(round(mean(n), 2)),
+    "). These duplications concern ",
+    length(unique(stem_dupli$IdStem)),
+    " stems.",
+    sep = ""
+  )
 }
 ```
 
 `r text`
 
 ```{r rmv_full_duplicate}
-if(length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
+if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
   prev_nb_obs <- dim(data_cor)[1]
   data_cor %>% distinct() -> data_cor # remove fully duplicated rows
-  if (prev_nb_obs - dim(data_cor)[1]!=0) { # if there were some fully duplicated rows
-    text <- paste(prev_nb_obs - dim(data_cor)[1],
-                "rows are true duplicates (fully identical rows).",
-                "These true duplicates are removed from the dataset, leaving a dataset of ",
-                dim(data_cor)[1],
-                " observations.")
+  if (prev_nb_obs - dim(data_cor)[1] != 0) { # if there were some fully duplicated rows
+    text <- paste(
+      prev_nb_obs - dim(data_cor)[1],
+      "rows are true duplicates (fully identical rows).",
+      "These true duplicates are removed from the dataset, leaving a dataset of ",
+      dim(data_cor)[1],
+      " observations."
+    )
   } else {
-    text <-""
+    text <- ""
   }
   data_cor %>%
-  count(IdStem, IdCensus) -> nb_stem_plot_bis 
+    count(IdStem, IdCensus) -> nb_stem_plot_bis
 } else { # if no duplicated rows
-  text <-""
+  text <- ""
 }
 ```
 
 `r text`
 
 ```{r non_full_duplicates}
-if(length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
-  if (all(length(unique(nb_stem_plot_bis$n)) == 1 , unique(nb_stem_plot_bis$n) == 1)) {
-  text <- "There is no more duplicated stem identifiers within a same census."
-  still_stem_dupli <- FALSE
+if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
+  if (all(length(unique(nb_stem_plot_bis$n)) == 1, unique(nb_stem_plot_bis$n) == 1)) {
+    text <- "There is no more duplicated stem identifiers within a same census."
+    still_stem_dupli <- FALSE
   } else {
-  nb_stem_plot_bis %>%
-    filter(n>1) ->  stem_dupli_bis
-  text <- paste("There are still",
-                dim(stem_dupli_bis)[1],
-                "cases of duplicated stem identifiers within a same census,",
-                "which are not fully replicated rows.",
-                "This concern the following cases:")
-  still_stem_dupli <- TRUE
+    nb_stem_plot_bis %>%
+      filter(n > 1) -> stem_dupli_bis
+    text <- paste(
+      "There are still",
+      dim(stem_dupli_bis)[1],
+      "cases of duplicated stem identifiers within a same census,",
+      "which are not fully replicated rows.",
+      "This concern the following cases:"
+    )
+    still_stem_dupli <- TRUE
   }
 } else {
   still_stem_dupli <- FALSE
@@ -264,7 +273,7 @@ if (still_stem_dupli == TRUE) {
 
 ```{r warn_still_duplicate}
 if (still_stem_dupli == TRUE) {
-text <- "IMPORTANT: Please check this cases in your raw data before starting the process again."
+  text <- "IMPORTANT: Please check this cases in your raw data before starting the process again."
 } else {
   text <- ""
 }
@@ -275,12 +284,12 @@ text <- "IMPORTANT: Please check this cases in your raw data before starting the
 ## Are there multi-stemmed trees?
 
 ```{r nbstemID}
-if(length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
-  text <- "The number of stem identifiers and the number of tree identifiers are equal, suggesting either that there 
-  are no multi-stemmed trees, or that the multiple stems are considered 
+if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
+  text <- "The number of stem identifiers and the number of tree identifiers are equal, suggesting either that there
+  are no multi-stemmed trees, or that the multiple stems are considered
   as different individuals."
 } else {
-  if(length(unique(data_cor$IdStem)) > length(unique(data_cor$IdTree))) {
+  if (length(unique(data_cor$IdStem)) > length(unique(data_cor$IdTree))) {
     text <- "There are more stem identifiers than tree identifiers (as given in the original dataset), suggesting that there are some multi-stemmed trees."
   } else {
     text <- "There are less stem identifiers than tree identifiers (as given in the original dataset), which suggest a problem of duplicated stem identifiers."
