@@ -20,42 +20,40 @@ library(tidyverse)
 
 <!-- TO DO
 * check why the chucks are displayed despite the echo: false instruction.
---> 
+-->
 
 # Introduction
 
--   what this code and document is for
+This document is made to be used by data contributors of the Bioforest project, which is an initiative of the TmFO network. By running this quarto document, you will be able to visualize various aspects of your data, and generate an aggregated data set as output. This aggregated data set (depending on the variables available) will be used for analysis by various working groups in the Bioforest project.
 
--   how to use it
+Before you run this quarto script, please make sure that you complete the following checklist, and ensure the your dataset is named and structured correctly to be able to run this script.
 
--   checklist of you need to do before running the script:
+Checklist:
 
-    -   sign the data agreement
+-   sign the data agreement
 
-    -   harmonize your dataset
+-   harmonize your dataset
 
-    -   send species list (should already be ok)
+-   send species list (should already be ok)
 
--   add plot-level information in this [document](google%20doc)
+-   add plot-level information in this [document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link)
 
 <!-- Load the data -->
 
 ```{r load data}
 # data_raw <- read.csv("data/raw_data/harmonized_data_misiones_v1.csv")
-# data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")
-data_raw <- read.csv("data/raw_data/harmonized_data_mbaiki_v1.csv")
+data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")
 # head(data_raw)
 # str(data_raw)
 ```
 
 # General presentation of the data
 
-This document presents the data aggregation for the `r unique(data_raw$Site)`. 
-This site had `r length(unique(data_raw$Plot))` plots: `r unique(data_raw$Plot)`.
+This document presents the data aggregation for the `r unique(data_raw$Site)`. This site had `r length(unique(data_raw$Plot))` plots: `r unique(data_raw$Plot)`.
 
 It has `r dim(data_raw)[1]` observations, belonging to `r length(unique(data_raw$IdStem))` stems.
 
-The following table shows the number of censuses per plots. 
+The following table shows the number of censuses per plots.
 
 ```{r censusNb}
 data_raw %>%
@@ -72,20 +70,18 @@ Censuses were conducted between `r min(data_raw$Year)` and `r max(data_raw$Year)
 
 This step checks for the absence of "anomalies" in the data.
 
-## No NA values in DBH?
+## No NA values in DBH
 
 ```{r Na_DBH}
 if (anyNA(data_raw$Diameter)) {
   nb_na_dbh <- sum(is.na(data_raw$Diameter))
-  perc_na_dbh <- round(sum(is.na(data_raw$Diameter)) *
-    100 / dim(data_raw)[1], 2)
+  perc_na_dbh <- round(sum(is.na(data_raw$Diameter)) * 100 / dim(data_raw)[1], 2)
   text <- paste("There are",
     nb_na_dbh,
     "missing diameters in the data, which represent",
     perc_na_dbh,
     "% of the observations.
-    The missing values are distributed across
-    the plots and censuses as follow:",
+    The missing values are distributed across the plots and censuses as follow:.",
     sep = " "
   )
 } else {
@@ -93,7 +89,7 @@ if (anyNA(data_raw$Diameter)) {
 }
 ```
 
-`r text` 
+`r text`
 
 ```{r explo_na_DBH}
 if (anyNA(data_raw$Diameter)) {
@@ -105,7 +101,7 @@ if (anyNA(data_raw$Diameter)) {
 }
 ```
 
-## DBH cutoff 
+## DBH cutoff
 
 ```{r DBHcutoff}
 #| message: false
@@ -114,13 +110,13 @@ if (length(unique(data_raw$MinDBH)) == 1) {
   text <- paste(
     "There is a single DBH cutoff set to",
     unique(data_raw$MinDBH),
-    "cm for the whole data set."
+    "for the whole data set."
   )
 } else {
   # count the number of cutoff per plot and census
-  cutoff_plot_cens <- data_raw %>%
+  data_raw %>%
     group_by(Plot, IdCensus) %>%
-    summarise(cutoff = length(unique(MinDBH)))
+    summarise(cutoff = length(unique(MinDBH))) -> cutoff_plot_cens
   if (length(unique(cutoff_plot_cens$cutoff)) != 1) {
     text <- "There is more than one DBH cutoff per plot and per census.
     This is a problem, please check the data."
@@ -149,15 +145,15 @@ if (length(unique(data_raw$MinDBH)) != 1) {
 ## All trees above the DBH cutoff
 
 ```{r abovecutoff}
-below_cut <- data_raw %>%
+data_raw %>%
   filter(Diameter < MinDBH) %>%
-  select(MinDBH, IdCensus, Plot, Diameter)
+  select(MinDBH, IdCensus, Plot, Diameter) -> below_cut
 if (dim(below_cut)[1] == 0) {
   text <- "There are no stems with a DBH below the DBH cutoff."
-  data_cor <- data_raw
+  data <- data_raw
 } else {
-  below_cut <- below_cut %>%
-    mutate(DBHDiff = MinDBH - Diameter)
+  below_cut %>%
+    mutate(DBHDiff = MinDBH - Diameter) -> below_cut
   data_cor <- data_raw %>% filter(Diameter >= MinDBH)
   text <- paste("There are ",
     dim(below_cut)[1],
@@ -168,8 +164,8 @@ if (dim(below_cut)[1] == 0) {
     round(min(below_cut$DBHDiff), 2), " cm and ",
     round(max(below_cut$DBHDiff), 2),
     " cm, with a median value of ",
-    round(median(below_cut$DBHDiff), 2),
-    "cm. These observations are removed, leaving a dataset of ",
+    round(median(below_cut$DBHDiff), 2), "cm.
+                These observations are removed, leaving a dataset of ",
     dim(data_cor)[1],
     " observations.",
     sep = ""
@@ -179,37 +175,28 @@ if (dim(below_cut)[1] == 0) {
 
 `r text`
 
-
 ## No stem ID duplicates
 
-```{r dummy_ID_dupl}
-#| eval: false
-
-# make a dummy data_set to test
-dupl <- slice_sample(data_cor, n = 15) # some duplicated
-dupl <- dupl %>%
-  mutate(Diameter = replace(
-    Diameter, IdStem == dupl$IdStem[1],
-    dupl$Diameter[1] + 10
-  )) # one duplicated with different DBH
-data_cor <- rbind(data_cor, dupl)
-data_cor <- rbind(data_cor, slice_sample(dupl, n = 3)) # some duplicated twice
-dupl_sev_census <- data_cor %>%
-  filter(IdStem == dupl$IdStem[2]) %>%
-  slice_sample(, n = 2) # one IDstem with several duplicated censuses
-data_cor <- rbind(data_cor, dupl_sev_census)
-```
-
-
 ```{r nostemID_duplicate}
-nb_stem_plot <- data_cor %>%
-  count(IdStem, IdCensus)
+# make a dummy data_set to test
+# dupl <- slice_sample(data_cor, n=15) # some duplicated
+# dupl %>%
+#    mutate(Diameter=replace(Diameter, IdStem==dupl$IdStem[1],
+#                            dupl$Diameter[1]+10)) -> dupl # one duplicated with different DBH
+# data_cor <- rbind(data_cor, dupl)
+# data_cor <- rbind(data_cor, slice_sample(dupl, n=3)) # some duplicated twice
+# data_cor %>% filter(IdStem == dupl$IdStem[2]) %>%
+#   slice_sample(, n=2) -> dupl_sev_census  # one IDstem with several duplicated censuses
+# data_cor <- rbind(data_cor, dupl_sev_census)
+
+data_cor %>%
+  count(IdStem, IdCensus) -> nb_stem_plot
 
 if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
   text <- "There is no duplicated stem identifiers within a same census."
 } else {
-  stem_dupli <- nb_stem_plot %>%
-    filter(n > 1)
+  nb_stem_plot %>%
+    filter(n > 1) -> stem_dupli
   text <- paste("There are ",
     dim(stem_dupli)[1],
     " cases of duplicated stem identifiers within a same census,",
@@ -232,22 +219,20 @@ if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
 ```{r rmv_full_duplicate}
 if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
   prev_nb_obs <- dim(data_cor)[1]
-  data_cor <- data_cor %>% distinct() # remove fully duplicated rows
-  if (prev_nb_obs - dim(data_cor)[1] != 0) { # if there
-    # were some fully duplicated rows
+  data_cor %>% distinct() -> data_cor # remove fully duplicated rows
+  if (prev_nb_obs - dim(data_cor)[1] != 0) { # if there were some fully duplicated rows
     text <- paste(
       prev_nb_obs - dim(data_cor)[1],
       "rows are true duplicates (fully identical rows).",
-      "These true duplicates are removed from the dataset,
-      leaving a dataset of ",
+      "These true duplicates are removed from the dataset, leaving a dataset of ",
       dim(data_cor)[1],
       " observations."
     )
   } else {
     text <- ""
   }
-  nb_stem_plot_bis <- data_cor %>%
-    count(IdStem, IdCensus)
+  data_cor %>%
+    count(IdStem, IdCensus) -> nb_stem_plot_bis
 } else { # if no duplicated rows
   text <- ""
 }
@@ -257,16 +242,12 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 
 ```{r non_full_duplicates}
 if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
-  if (all(
-    length(unique(nb_stem_plot_bis$n)) == 1,
-    unique(nb_stem_plot_bis$n) == 1
-  )) {
-    text <- "There is no more duplicated stem
-    dentifiers within a same census."
+  if (all(length(unique(nb_stem_plot_bis$n)) == 1, unique(nb_stem_plot_bis$n) == 1)) {
+    text <- "There is no more duplicated stem identifiers within a same census."
     still_stem_dupli <- FALSE
   } else {
-    stem_dupli_bis <- nb_stem_plot_bis %>%
-      filter(n > 1)
+    nb_stem_plot_bis %>%
+      filter(n > 1) -> stem_dupli_bis
     text <- paste(
       "There are still",
       dim(stem_dupli_bis)[1],
@@ -291,8 +272,7 @@ if (still_stem_dupli == TRUE) {
 
 ```{r warn_still_duplicate}
 if (still_stem_dupli == TRUE) {
-  text <- "IMPORTANT: Please check this cases
-  in your raw data before starting the process again."
+  text <- "IMPORTANT: Please check this cases in your raw data before starting the process again."
 } else {
   text <- ""
 }
@@ -304,288 +284,27 @@ if (still_stem_dupli == TRUE) {
 
 ```{r nbstemID}
 if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
-  text <- "The number of stem identifiers
-  and the number of tree identifiers are equal,
-  suggesting either that there are no multi-stemmed trees,
-  or that the multiple stems are considered
+  text <- "The number of stem identifiers and the number of tree identifiers are equal, suggesting either that there
+  are no multi-stemmed trees, or that the multiple stems are considered
   as different individuals."
 } else {
   if (length(unique(data_cor$IdStem)) > length(unique(data_cor$IdTree))) {
-    text <- "There are more stem identifiers than tree identifiers,
-    suggesting that there are some multi-stemmed trees."
+    text <- "There are more stem identifiers than tree identifiers (as given in the original dataset), suggesting that there are some multi-stemmed trees."
   } else {
-    text <- "There are less stem identifiers than tree identifiers,
-    which suggest a problem of duplicated stem identifiers."
+    text <- "There are less stem identifiers than tree identifiers (as given in the original dataset), which suggest a problem of duplicated stem identifiers."
   }
 }
 ```
 
 `r text`
 
-## No NA is scientific name ?
-
-```{r na_sp}
-if (anyNA(data_cor$ScientificName)) {
-  nb_na_sp <- sum(is.na(data_cor$ScientificName))
-  perc_na_sp <- round(sum(is.na(data_cor$ScientificName)) *
-    100 / dim(data_cor)[1], 2)
-  nb_na_sp_tree <- data_cor %>%
-    filter(is.na(ScientificName)) %>%
-    summarise((length(unique(IdTree))))
-  text <- paste("There are",
-    nb_na_sp,
-    "observations with NAs in the scientific names, which represent",
-    perc_na_sp,
-    "% of the observations.
-    This concerns",
-    nb_na_sp_tree,
-    "trees.",
-    "The observations with NAs in the scientific names
-    are distributed across the plots and censuses as follow:",
-    sep = " "
-  )
-} else {
-  text <- "There are no observations with NAs
-  in the scientific names in the data."
-}
-```
-
-`r text`
-
-```{r explo_na_sp}
-if (anyNA(data_cor$ScientificName)) {
-  data_cor %>%
-    filter(is.na(ScientificName)) %>%
-    count(Plot, IdCensus) %>%
-    pivot_wider(names_from = Plot, values_from = n) %>%
-    knitr::kable()
-}
-```
-
-## Only one scientific name per tree 
-
-This step adds two columns to the dataset:
-
-- ScientificName_cor : corrected scientific name, see SpName_codecor 
-to know how it was filled. 
-
-<!-- To discuss : it would be worth it gapfilling the scientific name 
-when some obs are indet. as well,
-But I don't know if the Inded are always coded the same, and how...-->
-
-- SpName_codecor : the type of correction that has been done: 
-    - "no_cor" when there was no problem, 
-    - "gapfilled" observations with NA in the ScientificName, 
-    but for which other observations of the same trees 
-    have a unique ScientificName.
-    These case were gapfilled but putting the scientific name
-    of the other observations in ScientificName_cor
-    - "more than one scientific name" for observations of individuals with 
-    at least 2 different (non NA) scientific names. 
-    As we cannot know which is correct, 
-    all observations of the given individuals are set to NA. 
-    
-```{r dummy_Sp_dupl}
-#| eval: true
-
-# create a dummy dataset to test (works for Mbaiki but probably not for all)
-set.seed(55)
-# add a different species names for one census
-# of a tree with NA in ScientificName
-sample_temp <- data_cor %>%
-  filter(is.na(ScientificName)) %>%
-  slice_sample(, n = 1) %>%
-  select(IdCensus, IdStem)
-data_cor <- data_cor %>%
-  mutate(ScientificName = replace(ScientificName,
-    (IdCensus == sample_temp$IdCensus &
-      IdStem == sample_temp$IdStem),
-    values = "Bla blabbla"
-  ))
-# add a different species names for one census
-# of a tree with not an NA in ScientificName
-sample_temp2 <- data_cor %>%
-  filter(!(is.na(ScientificName))) %>%
-  slice_sample(, n = 1) %>%
-  select(IdCensus, IdStem)
-data_cor <- data_cor %>%
-  mutate(ScientificName = replace(ScientificName,
-    (IdCensus == sample_temp2$IdCensus &
-      IdStem == sample_temp2$IdStem),
-    values = "Bli blibbli"
-  ))
-# add two differents species names for a tree that
-# is not NA (so will have 3 species names in total)
-sampleInd <- data_cor %>%
-  filter(!(is.na(ScientificName))) %>%
-  select(IdTree) %>%
-  sample_n(, size = 1) %>%
-  as.numeric()
-sampleCens <- data_cor %>%
-  filter(IdTree == sampleInd) %>%
-  select(IdCensus) %>%
-  sample_n(, size = 2) %>%
-  as.vector()
-data_cor <- data_cor %>%
-  mutate(ScientificName = replace(ScientificName,
-    (IdCensus == sampleCens$IdCensus[1] &
-      IdTree == sampleInd),
-    values = "Blu blubblu"
-  ))
-data_cor <- data_cor %>%
-  mutate(ScientificName = replace(ScientificName,
-    (IdCensus == sampleCens$IdCensus[2] &
-      IdTree == sampleInd),
-    values = "Blo blobblo"
-  ))
-# data_cor %>%
-#   filter(ScientificName %in% c("Bla blabbla", "Bli blibbli",
-# "Blu blubblu", "Blo blobblo")) %>%
-#   select(IdTree)
-```
-    
-
-```{r one_sp_per_tree}
-nb_sp_tree <- data_cor %>%
-  group_by(IdTree) %>%
-  summarise(nbsp = length(unique(ScientificName)))
-
-data_cor <- data_cor %>% mutate(
-  ScientificName_cor = as.character(NA),
-  SpName_codecor = as.factor(NA)
-)
-
-# when there is just one scientific name for all the observation of a given tree
-tree_no_cor <- nb_sp_tree %>% filter(nbsp == 1)
-# use the ScientificNames as the corrected one
-data_cor <- data_cor %>%
-  mutate(ScientificName_cor = ifelse(IdTree %in% tree_no_cor$IdTree,
-    ScientificName,
-    ScientificName_cor
-  ))
-# fill in the code_cor
-data_cor <- data_cor %>%
-  mutate(SpName_codecor = ifelse(IdTree %in% tree_no_cor$IdTree,
-    "no_cor",
-    SpName_codecor
-  ))
-
-# When there are two scientific names
-tree_2_sp <- nb_sp_tree %>% filter(nbsp == 2)
-for (i in tree_2_sp$IdTree) {
-  names2 <- data_cor %>%
-    filter(IdTree == i) %>%
-    reframe(names = unique(ScientificName))
-  if (any(is.na(names2))) { # if one of the two names is NA
-    data_cor <- data_cor %>%
-      mutate(ScientificName_cor = ifelse(IdTree == i,
-        ifelse(
-          is.na(ScientificName), # if NA in Scientific name
-          names2[!is.na(names2)], # we use the name of the other obs
-          ScientificName
-        ), # otherwise, use the name of the current obs
-        ScientificName_cor
-      )) # do nothing if not the tree of interest
-    # fill in the code_cor
-    data_cor <- data_cor %>%
-      mutate(SpName_codecor = ifelse(IdTree == i,
-        ifelse(
-          is.na(ScientificName), # if NA in Scientific name
-          "gapfilled",
-          "no_cor"
-        ),
-        SpName_codecor
-      )) # do nothing if not the tree of interest
-  } else { # if none of the two names are NA
-    data_cor <- data_cor %>%
-      mutate(ScientificName_cor = ifelse(IdTree == i,
-        NA, # put NA as we don't know which one is the good one
-        ScientificName_cor
-      ))
-    # fill in the code_cor
-    data_cor <- data_cor %>%
-      mutate(SpName_codecor = ifelse(IdTree == i,
-        "more than one scientific name",
-        SpName_codecor
-      ))
-  }
-}
-
-# when there are more than two scientific name for a given tree
-tree_many_sp <- nb_sp_tree %>% filter(nbsp > 2)
-# replace the name by NA (as we don't know which one is the good one
-data_cor <- data_cor %>%
-  mutate(ScientificName_cor = ifelse(IdTree %in% tree_many_sp,
-    NA,
-    ScientificName_cor
-  ))
-# fill in the code_cor
-data_cor <- data_cor %>%
-  mutate(SpName_codecor = ifelse(IdTree %in% tree_many_sp,
-    "more than one scientific name",
-    SpName_codecor
-  ))
-```
-
-
-
-```{r textSPdupl}
-if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
-  text <- "There was always only one scientific name for a given individual
-  (or always a NA). No change has been made.
-  The value is ScientificName_cor is the same than in ScientificName,
-  and SpName_codecor is always 'no_cor'"
-} else { # if some correction have been made
-  nb_filled <- data_cor %>%
-    filter(SpName_codecor == "gapfilled") %>%
-    count()
-  nb_prob <- data_cor %>%
-    filter(SpName_codecor == "more than one scientific name") %>%
-    count()
-  if (nb_filled != 0) {
-    text1 <- paste(
-      "There were",
-      nb_filled,
-      "observations with NA in the ScientificName,
-                   but for which other observations of the same trees
-                   have a unique ScientificName.
-                   These case were gapfilled but putting the scientific name
-                   of the other observations in ScientificName_cor. The
-                   value in SpName_codecor is 'gapfilled'."
-    )
-  } else {
-    text1 <- ""
-  }
-  if (nb_prob != 0) {
-    text2 <- paste(
-      "There were",
-      nb_prob,
-      "observations of individuals with at least 2 different (non NA)
-                   scientific names.
-                   As we cannot know which is correct,
-                   all observations of the given individuals are set to NA.
-                   The value in SpName_codecor
-      is 'more than one scientific name.`"
-    )
-  } else {
-    text2 <- ""
-  }
-  text <- paste(text1, "\n", text2)
-}
-```
-
-`r text`
-
+## Only one species per tree
 
 ## Only one set of coordinates per tree and no missing coordinates
 
 <!-- Which coordinates do we take ? check if there are dataset with no absolute coordinate-->
 
 ## All trees within the plot
-
-<!-- how do we do that ? do we have the absolute coordinates of all plots? I guess no.
-So we just check that the relative coordinate doesn't exceed the plot dimensions? -->
-
 
 # First step of data visualization
 
