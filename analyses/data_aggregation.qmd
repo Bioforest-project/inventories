@@ -318,7 +318,7 @@ if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
 
 # DBH corrections
 
-flowchart
+![Flowchart of DBH corrections](/figures/flowchart_dbh_correction.png)
 
 # Biodiversity metrics
 
