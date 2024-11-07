@@ -44,9 +44,9 @@ Checklist:
 <!-- Load the data -->
 
 ```{r load data}
-# data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")
+# data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")  # nolint
 data_raw <- read.csv("data/raw_data/harmonized_data_mbaiki_v1.csv")
-#### MITHILA, please leave this commented code here 
+#### MITHILA, please leave this commented code here
 # while we are developping the code
 # we will revove it later
 ```
@@ -317,7 +317,8 @@ if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
 
 ```{r uniquespeciespertree}
 data_sps_dup <- data_raw %>%
-  group_by(IdStem, ScientificName, # Family, (changed as there is no Family in the dataset)
+  group_by(IdStem, ScientificName,
+           # Family, (changed as there is no Family in the dataset)
            Genus, Species, VernName) %>%
   count() %>%
   add_count(IdStem, sort = FALSE, name = "freq_idstem") %>%
@@ -352,11 +353,21 @@ if (dim(data_sps_dup)[1] == 0) {
 
 ![Flowchart of DBH corrections](flowchart_dbh_correction.png)
 
+We keep the original `Diameter` column and add a `diameter_cor` column where we implement diameter corrections. 
+
 ```{r}
-data_cor$DiameterCor <- data_cor$Diameter
+data_cor$diameter_cor <- data_cor$Diameter
 ```
 
 ## Taper correction
+
+The taper correction estimates DBH for diameter values measured above breast height. We used the function from function from Cushman et al. (2014): 
+$$ DBH = D \cdot e^{b(HOM - 1.3)}$$
+where $DBH$ is the estimated diameter at breast height, $D$ is the measured diameter (cm) at height of measurement $HOM$ (m) and $b$ is defined as follows:
+
+$$b = e^{-2.0205 - 0.5053 ln(diam) + 0.3748 ln(HOM)}$$
+Note: We did not use the equation from Cushman et al. (2020) because, although it includes additional data from a larger number of sites, the equation can give negative values of $b$, resulting in values of $DBH$ less than $D$. One solution in the future is to recalibrate the function using the original data from Cushman et al. (2020). 
+  
 
 ```{r}
 source("r/taper.R")
@@ -365,9 +376,9 @@ if (any(colnames(data_cor) == "HOM")) {
     "The height of measurement information is available so we could apply the",
     "taper correction from Cushman et al., 2014."
   )
-  data_cor$DiameterCor <- taper(data_cor$DiameterCor, data_cor$HOM)
+  data_cor$diameter_cor <- taper(data_cor$diameter_cor, data_cor$HOM)
   subset(data_cor, HOM > 1.3) |>
-    ggplot(aes(x = Diameter, y = DiameterCor, col = HOM)) +
+    ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
     geom_abline(intercept = 0, slope = 1, lty = 2) +
     geom_point() +
     labs(x = "Original diameter (cm)", y = "Taper-corrected diameter (cm)") +
@@ -385,6 +396,10 @@ if (any(colnames(data_cor) == "HOM")) {
 
 ## Interpolating missing measurements
 
+If trees are missed in a census and remeasured in a later census, we use the DBH values from the previous and next census to interpolate the missing DBH value(s). 
+
+This may lead to bias in the first and last censuses, where missed DBHs cannot be detected. We need to check that recruitment and mortality rates are not systematically lower in these two censuses. 
+
 ```{r}
 source("r/interpolate.R")
 missing_censuses <- data_cor |>
@@ -399,7 +414,7 @@ missing_censuses <- data_cor |>
   ) |>
   # add DBH information
   merge(
-    data_cor[, c("IdTree", "Year", "DiameterCor")],
+    data_cor[, c("IdTree", "Year", "diameter_cor")],
     by = c("IdTree", "Year"),
     all = TRUE
   ) |>
@@ -407,9 +422,9 @@ missing_censuses <- data_cor |>
   group_by(IdTree) |>
   reframe(
     Year = Year,
-    DiameterCor = interpolate(DiameterCor, Year)
+    diameter_cor = interpolate(diameter_cor, Year)
   ) |>
-  subset(!is.na(DiameterCor))
+  subset(!is.na(diameter_cor))
 
 # add tree-level information
 col_tree <-
@@ -437,7 +452,7 @@ if (sum(is.na(data_cor$Diameter)) > 0) {
   )
   illustration <- sample(subset(data_cor, is.na(Diameter))$IdTree, 12)
   subset(data_cor, IdTree %in% illustration) |>
-    ggplot(aes(x = Year, y = DiameterCor)) +
+    ggplot(aes(x = Year, y = diameter_cor)) +
     geom_point(aes(col = is.na(Diameter))) +
     labs(x = "Census year", y = "Diameter (cm)", col = "Interpolated") +
     scale_color_manual(values = c("black", "red")) +
