@@ -30,6 +30,10 @@ Before you run this quarto script, please make sure that you complete the follow
 
 Checklist:
 
+-   what is raw data? - uncorrected data
+
+<!-- -->
+
 -   sign the data agreement
 
 -   harmonize your dataset
@@ -299,6 +303,24 @@ if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
 `r text`
 
 ## Only one species per tree
+
+```{r uniquespeciespertree}
+
+data_sps_dup <- data_raw %>%
+  group_by(IdStem, ScientificName, Family, Genus, Species, VernName) %>%
+  count() %>%
+  add_count(IdStem, sort = FALSE, name = "freq_idstem") %>%
+  filter(freq_idstem != 1)
+
+if (dim(data_sps_dup)[1] == 0) {
+  text <- "Every tree has the same name across all censuses, you can proceed to the next step"
+} else {
+  text <- c("There are still individuals to be check for their identification. They have a different species name in different censuses. Please check the following table to identify the individuals that are not consistently named:", data_sps_dup)
+}
+
+```
+
+`r text`
 
 ## Only one set of coordinates per tree and no missing coordinates
 
