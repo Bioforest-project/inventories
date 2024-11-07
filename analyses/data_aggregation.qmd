@@ -317,7 +317,8 @@ if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
 
 ```{r uniquespeciespertree}
 data_sps_dup <- data_raw %>%
-  group_by(IdStem, ScientificName, Family, Genus, Species, VernName) %>%
+  group_by(IdStem, ScientificName, # Family, (changed as there is no Family in the dataset)
+           Genus, Species, VernName) %>%
   count() %>%
   add_count(IdStem, sort = FALSE, name = "freq_idstem") %>%
   filter(freq_idstem != 1)
