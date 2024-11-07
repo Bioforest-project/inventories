@@ -353,20 +353,20 @@ if (dim(data_sps_dup)[1] == 0) {
 ![Flowchart of DBH corrections](flowchart_dbh_correction.png)
 
 ```{r}
-data_raw$DiameterCor <- data_raw$Diameter
+data_cor$DiameterCor <- data_cor$Diameter
 ```
 
 ## Taper correction
 
 ```{r}
 source("r/taper.R")
-if (any(colnames(data_raw) == "HOM")) {
+if (any(colnames(data_cor) == "HOM")) {
   text <- paste(
     "The height of measurement information is available so we could apply the",
     "taper correction from Cushman et al., 2014."
   )
-  data_raw$DiameterCor <- taper(data_raw$DiameterCor, data_raw$HOM)
-  subset(data_raw, HOM > 1.3) |>
+  data_cor$DiameterCor <- taper(data_cor$DiameterCor, data_cor$HOM)
+  subset(data_cor, HOM > 1.3) |>
     ggplot(aes(x = Diameter, y = DiameterCor, col = HOM)) +
     geom_abline(intercept = 0, slope = 1, lty = 2) +
     geom_point() +
@@ -387,19 +387,19 @@ if (any(colnames(data_raw) == "HOM")) {
 
 ```{r}
 source("r/interpolate.R")
-missing_censuses <- data_raw |>
+missing_censuses <- data_cor |>
   # list all census years by plot and subplot
   group_by(Plot, Subplot) |>
   reframe(Year = unique(Year)) |>
   ungroup() |>
   # add all combinations of IdTree x IdCensus (by Plot and Subplot)
   merge(
-    unique(data_raw[, c("Plot", "Subplot", "IdTree")]),
+    unique(data_cor[, c("Plot", "Subplot", "IdTree")]),
     by = c("Plot", "Subplot")
   ) |>
   # add DBH information
   merge(
-    data_raw[, c("IdTree", "Year", "DiameterCor")],
+    data_cor[, c("IdTree", "Year", "DiameterCor")],
     by = c("IdTree", "Year"),
     all = TRUE
   ) |>
@@ -415,28 +415,28 @@ missing_censuses <- data_raw |>
 col_tree <-
   !grepl(
     "census|year|month|day|date|status|code|diam|hom|pom|circ|dbh",
-    tolower(colnames(data_raw))
+    tolower(colnames(data_cor))
   )
 missing_censuses <- merge(missing_censuses,
-  unique(data_raw[, col_tree]),
+  unique(data_cor[, col_tree]),
   by = "IdTree"
 )
 
 # add interpolated DBHs to raw data
-data_raw <- merge(
-  data_raw,
+data_cor <- merge(
+  data_cor,
   missing_censuses,
   all.y = TRUE
 )
 rm(missing_censuses)
 
-if (sum(is.na(data_raw$Diameter)) > 0) {
+if (sum(is.na(data_cor$Diameter)) > 0) {
   text <- paste(
-    sum(is.na(data_raw$Diameter)),
+    sum(is.na(data_cor$Diameter)),
     "missing DBH values were interpolated."
   )
-  illustration <- sample(subset(data_raw, is.na(Diameter))$IdTree, 12)
-  subset(data_raw, IdTree %in% illustration) |>
+  illustration <- sample(subset(data_cor, is.na(Diameter))$IdTree, 12)
+  subset(data_cor, IdTree %in% illustration) |>
     ggplot(aes(x = Year, y = DiameterCor)) +
     geom_point(aes(col = is.na(Diameter))) +
     labs(x = "Census year", y = "Diameter (cm)", col = "Interpolated") +
