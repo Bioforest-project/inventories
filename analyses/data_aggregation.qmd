@@ -330,7 +330,7 @@ data_raw$DiameterCor <- data_raw$Diameter
 source("r/taper.R")
 if (any(colnames(data_raw) == "HOM")) {
   text <- paste(
-    "The height of measurement information is available so we can apply the",
+    "The height of measurement information is available so we could apply the",
     "taper correction from Cushman et al., 2014."
   )
   data_raw$DiameterCor <- taper(data_raw$DiameterCor, data_raw$HOM)
@@ -344,7 +344,7 @@ if (any(colnames(data_raw) == "HOM")) {
 } else {
   text <- paste(
     "There is no information on height of measurement information,",
-    "so we cannot apply any taper correction."
+    "so we could not apply any taper correction."
   )
 }
 ```
@@ -354,6 +354,77 @@ if (any(colnames(data_raw) == "HOM")) {
 
 ## Interpolating missing measurements
 
+```{r}
+source("r/interpolate.R")
+missing_censuses <- data_raw |>
+  # list all census years by plot and subplot
+  group_by(Plot, Subplot) |>
+  reframe(Year = unique(Year)) |>
+  ungroup() |>
+  # add all combinations of IdTree x IdCensus (by Plot and Subplot)
+  merge(
+    unique(data_raw[, c("Plot", "Subplot", "IdTree")]),
+    by = c("Plot", "Subplot")
+  ) |>
+  # add DBH information
+  merge(
+    data_raw[, c("IdTree", "Year", "DiameterCor")],
+    by = c("IdTree", "Year"),
+    all = TRUE
+  ) |>
+  # interpolate missing diameters
+  group_by(IdTree) |>
+  reframe(
+    Year = Year,
+    DiameterCor = interpolate(DiameterCor, Year)
+  ) |>
+  subset(!is.na(DiameterCor))
+
+# add tree-level information
+col_tree <-
+  !grepl("census|year|month|day|date|status|code|diam|hom|pom|circ|dbh",
+         tolower(colnames(data_raw)))
+missing_censuses <- merge(missing_censuses,
+                          unique(data_raw[, col_tree]), by = "IdTree")
+
+# add interpolated DBHs to raw data
+data_raw <- merge(
+  data_raw,
+  missing_censuses,
+  all.y = TRUE
+)
+rm(missing_censuses)
+
+if (sum(is.na(data_raw$Diameter)) > 0) {
+  text <- paste(sum(is.na(data_raw$Diameter)),
+                "missing DBH values were interpolated.")
+  illustration <- sample(subset(data_raw, is.na(Diameter))$IdTree, 12)
+  subset(data_raw, IdTree %in% illustration) |>
+    ggplot(aes(x = Year, y = DiameterCor)) +
+    geom_point(aes(col = is.na(Diameter))) +
+    labs(x = "Census year", y = "Diameter (cm)", col = "Interpolated") +
+    scale_color_manual(values = c("black", "red")) +
+    facet_wrap(~IdTree, scales = "free") +
+    theme_classic() +
+    theme(legend.position = "bottom")
+} else {
+  text <- "No missing DBH values were interpolated."
+}
+```
+
+`r text`
+
+## Correct DBH changes 
+
+### Estimate DBH changes
+
+### Define DBH change threshold 
+
+### Shift DBH series
+
+When there is a reported change in height of measurement but the new height of measurement is unknown. 
+
+### Substitute excessive DBH changes 
 
 
 # Biodiversity metrics
