@@ -44,7 +44,11 @@ Checklist:
 <!-- Load the data -->
 
 ```{r load data}
-data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")
+# data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")
+data_raw <- read.csv("data/raw_data/harmonized_data_mbaiki_v1.csv")
+#### MITHILA, please leave this commented code here 
+# while we are developping the code
+# we will revove it later
 ```
 
 # General presentation of the data
@@ -113,7 +117,7 @@ if (length(unique(data_raw$MinDBH)) == 1) {
   text <- paste(
     "There is a single DBH cutoff set to",
     unique(data_raw$MinDBH),
-    "for the whole data set."
+    "cm for the whole data set."
   )
 } else {
   # count the number of cutoff per plot and census
@@ -153,7 +157,7 @@ below_cut <- data_raw %>%
   select(MinDBH, IdCensus, Plot, Diameter)
 if (dim(below_cut)[1] == 0) {
   text <- "There are no stems with a DBH below the DBH cutoff."
-  data <- data_raw
+  data_cor <- data_raw
 } else {
   below_cut <- below_cut %>%
     mutate(DBHDiff = MinDBH - Diameter)
@@ -182,6 +186,8 @@ if (dim(below_cut)[1] == 0) {
 
 ```{r}
 #| eval: false
+
+# Make a dummy data set to test
 dupl <- slice_sample(data_cor, n = 15) # some duplicated
 dupl <- dupl %>%
   mutate(Diameter = replace(
@@ -298,9 +304,9 @@ if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
   text <- "The number of stem identifiers and the number of tree identifiers are equal, suggesting either that there are no multi-stemmed trees, or that the multiple stems are considered as different individuals." # nolint
 } else {
   if (length(unique(data_cor$IdStem)) > length(unique(data_cor$IdTree))) {
-    text <- "There are more stem identifiers than tree identifiers (as given in the original dataset), suggesting that there are some multi-stemmed trees." # nolint
+    text <- "There are more stem identifiers than tree identifiers, suggesting that there are some multi-stemmed trees." # nolint
   } else {
-    text <- "There are less stem identifiers than tree identifiers (as given in the original dataset), which suggest a problem of duplicated stem identifiers." # nolint
+    text <- "There are less stem identifiers than tree identifiers, which suggest a problem of duplicated stem identifiers." # nolint
   }
 }
 ```
