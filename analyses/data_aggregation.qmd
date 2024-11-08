@@ -474,7 +474,7 @@ if (sum(is.na(data_cor$Diameter)) > 0) {
 data_cor <- data_cor |>
   group_by(IdTree) |>
   mutate(
-    diameter_growth = c(NA, diff(diameter_cor)) / c(NA, diff(Year)),
+    diam_growth = c(NA, diff(diameter_cor)) / c(NA, diff(Year)),
     diff_year = c(NA, diff(Year))
   )
 ```
@@ -482,12 +482,12 @@ data_cor <- data_cor |>
 ### Define DBH change threshold
 
 ```{r}
-gr_range <- quantile(data_cor$diameter_growth, c(0.01, 0.99), na.rm = TRUE)
+gr_range <- quantile(data_cor$diam_growth, c(0.01, 0.99), na.rm = TRUE)
 subset(
   data_cor,
-  diameter_growth >= gr_range[1] & diameter_growth <= gr_range[2]
+  diam_growth >= gr_range[1] & diam_growth <= gr_range[2]
 ) |>
-  ggplot(aes(x = diameter_growth)) +
+  ggplot(aes(x = diam_growth)) +
   geom_histogram(aes(fill = factor(Plot)), binwidth = 0.1) +
   labs(x = "Diameter growth (cm/yr)", fill = "Plot") +
   theme_classic()
@@ -520,16 +520,45 @@ Note:
 
 ```{r}
 average_growth <- data_cor |>
-  subset(diameter_growth >= gr_range[1] & diameter_growth <= gr_range[2]) |>
-  with(mean(diameter_growth, na.rm = TRUE))
+  subset(diam_growth >= gr_range[1] & diam_growth <= gr_range[2]) |>
+  with(mean(diam_growth, na.rm = TRUE))
 
 data_cor <- data_cor |>
-  mutate(diameter_growth = ifelse(
-    !is.na(diameter_growth) &
-      (diameter_growth < gr_range[1] | diameter_growth > gr_range[2]),
+  mutate(diam_growth_cor = ifelse(
+    !is.na(diam_growth) &
+      (diam_growth < gr_range[1] | diam_growth > gr_range[2]),
     average_growth,
-    diameter_growth
+    diam_growth
   ))
+```
+
+`r with(data_cor, sum(diam_growth_cor != diam_growth & !is.na(diam_growth_cor)))` outlier DBH growth values were substituted. The following graph shows a subset of trees where the most DBH growth values were substituted. 
+
+```{r}
+id_cor <-
+  subset(
+    data_cor,
+    diam_growth_cor != diam_growth & !is.na(diam_growth_cor)
+  )$IdTree
+tree_subs <-
+  data_cor |>
+  subset(IdTree %in% id_cor) |>
+  group_by(IdTree) |>
+  summarise(
+    nsubs = sum(diam_growth_cor != diam_growth & !is.na(diam_growth_cor))
+  ) |>
+  arrange(desc(nsubs))
+
+data_cor |>
+  subset(IdTree %in% tree_subs$IdTree[1:6]) |>
+  mutate(subs = diam_growth_cor != diam_growth & !is.na(diam_growth_cor)) |> 
+  pivot_longer(cols = c("diam_growth", "diameter_cor")) |> 
+  ggplot(aes(x = Year)) +
+  geom_point(aes(y = value, col = subs)) +
+  labs(col = "Outlier DBH growth?") +
+  scale_color_manual(values = c("black", "red")) +
+  facet_grid(name ~ IdTree, scales = "free") +
+  theme_classic()
 ```
 
 # Biodiversity metrics
