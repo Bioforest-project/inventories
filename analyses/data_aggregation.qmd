@@ -551,8 +551,8 @@ tree_subs <-
 
 data_cor |>
   subset(IdTree %in% tree_subs$IdTree[1:6]) |>
-  mutate(subs = diam_growth_cor != diam_growth & !is.na(diam_growth_cor)) |> 
-  pivot_longer(cols = c("diam_growth", "diameter_cor")) |> 
+  mutate(subs = diam_growth_cor != diam_growth & !is.na(diam_growth_cor)) |>
+  pivot_longer(cols = c("diam_growth", "diameter_cor")) |>
   ggplot(aes(x = Year)) +
   geom_point(aes(y = value, col = subs)) +
   labs(col = "Outlier DBH growth?") +
