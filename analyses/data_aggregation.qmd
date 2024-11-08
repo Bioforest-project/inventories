@@ -470,6 +470,26 @@ if (sum(is.na(data_cor$Diameter)) > 0) {
 
 ### Estimate DBH growth
 
+```{r}
+data_cor <- data_cor |>
+  group_by(IdTree) |>
+  mutate(
+    diameter_growth = c(NA, diff(diameter_cor)) / c(NA, diff(Year)),
+    diff_year = c(NA, diff(Year))
+  )
+
+gr_range <- quantile(data_cor$diameter_growth, c(0.01, 0.99), na.rm = TRUE)
+
+subset(
+  data_cor,
+  diameter_growth > gr_range[1] & diameter_growth < gr_range[2]
+) |>
+  ggplot(aes(x = diameter_growth)) +
+  geom_histogram(aes(fill = Plot), binwidth = 0.1)
+```
+
+This graph shows all DBH growth values (in cm/yr) between the first and the 99th percentiles, i.e. between `r gr_range[1]` and `r gr_range[2]` cm/yr. 
+
 ### Define DBH change threshold
 
 ### Shift DBH series
