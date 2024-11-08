@@ -317,9 +317,11 @@ if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
 
 ```{r uniquespeciespertree}
 data_sps_dup <- data_raw %>%
-  group_by(IdStem, ScientificName,
-           # Family, (changed as there is no Family in the dataset)
-           Genus, Species, VernName) %>%
+  group_by(
+    IdStem, ScientificName,
+    # Family, (changed as there is no Family in the dataset)
+    Genus, Species, VernName
+  ) %>%
   count() %>%
   add_count(IdStem, sort = FALSE, name = "freq_idstem") %>%
   filter(freq_idstem != 1)
@@ -367,7 +369,7 @@ where $DBH$ is the estimated diameter at breast height, $D$ is the measured diam
 
 $$b = e^{-2.0205 - 0.5053 ln(diam) + 0.3748 ln(HOM)}$$
 Note: We did not use the equation from Cushman et al. (2020) because, although it includes additional data from a larger number of sites, the equation can give negative values of $b$, resulting in values of $DBH$ less than $D$. One solution in the future is to recalibrate the function using the original data from Cushman et al. (2020). 
-  
+
 
 ```{r}
 source("r/taper.R")
@@ -402,6 +404,14 @@ This may lead to bias in the first and last censuses, where missed DBHs cannot b
 
 ```{r}
 source("r/interpolate.R")
+
+# columns with tree-level information in data_cor
+col_tree <-
+  !grepl(
+    "census|year|month|day|date|status|code|diam|hom|pom|circ|dbh",
+    tolower(colnames(data_cor))
+  )
+
 missing_censuses <- data_cor |>
   # list all census years by plot and subplot
   group_by(Plot, Subplot) |>
@@ -412,6 +422,8 @@ missing_censuses <- data_cor |>
     unique(data_cor[, c("Plot", "Subplot", "IdTree")]),
     by = c("Plot", "Subplot")
   ) |>
+  # add tree-level information
+  merge(unique(data_cor[, col_tree])) |>
   # add DBH information
   merge(
     data_cor[, c("IdTree", "Year", "diameter_cor")],
@@ -420,22 +432,10 @@ missing_censuses <- data_cor |>
   ) |>
   # interpolate missing diameters
   group_by(IdTree) |>
-  reframe(
-    Year = Year,
+  mutate(
     diameter_cor = interpolate(diameter_cor, Year)
   ) |>
   subset(!is.na(diameter_cor))
-
-# add tree-level information
-col_tree <-
-  !grepl(
-    "census|year|month|day|date|status|code|diam|hom|pom|circ|dbh",
-    tolower(colnames(data_cor))
-  )
-missing_censuses <- merge(missing_censuses,
-  unique(data_cor[, col_tree]),
-  by = "IdTree"
-)
 
 # add interpolated DBHs to raw data
 data_cor <- merge(
@@ -468,7 +468,7 @@ if (sum(is.na(data_cor$Diameter)) > 0) {
 
 ## Correct DBH changes
 
-### Estimate DBH changes
+### Estimate DBH growth
 
 ### Define DBH change threshold
 
