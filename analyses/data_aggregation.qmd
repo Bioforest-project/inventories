@@ -316,7 +316,7 @@ if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
 if (anyNA(data_cor$ScientificName)) {
   nb_na_sp <- sum(is.na(data_cor$ScientificName))
   perc_na_sp <- round(sum(is.na(data_cor$ScientificName)) *
-    100 / dim(data_cor)[1], 2)
+                        100 / dim(data_cor)[1], 2)
   nb_na_sp_tree <- data_cor %>%
     filter(is.na(ScientificName)) %>%
     summarise((length(unique(IdTree))))
@@ -376,7 +376,7 @@ But I don't know if the Inded are always coded the same, and how...
 
     
 ```{r dummy_Sp_dupl}
-#| eval: true
+#| eval: false
 
 # create a dummy dataset to test (works for Mbaiki but probably not for all)
 set.seed(55)
@@ -389,7 +389,7 @@ sample_temp <- data_cor %>%
 data_cor <- data_cor %>%
   mutate(ScientificName = replace(ScientificName,
     (IdCensus == sample_temp$IdCensus &
-      IdStem == sample_temp$IdStem),
+       IdStem == sample_temp$IdStem),
     values = "Bla blabbla"
   ))
 # add a different species names for one census
@@ -401,17 +401,17 @@ sample_temp2 <- data_cor %>%
 data_cor <- data_cor %>%
   mutate(ScientificName = replace(ScientificName,
     (IdCensus == sample_temp2$IdCensus &
-      IdStem == sample_temp2$IdStem),
+       IdStem == sample_temp2$IdStem),
     values = "Bli blibbli"
   ))
 # add two differents species names for a tree that
 # is not NA (so will have 3 species names in total)
-sampleInd <- data_cor %>%
+sampleInd <- data_cor %>% #nolint
   filter(!(is.na(ScientificName))) %>%
   select(IdTree) %>%
   sample_n(, size = 1) %>%
   as.numeric()
-sampleCens <- data_cor %>%
+sampleCens <- data_cor %>% #nolint
   filter(IdTree == sampleInd) %>%
   select(IdCensus) %>%
   sample_n(, size = 2) %>%
@@ -419,19 +419,16 @@ sampleCens <- data_cor %>%
 data_cor <- data_cor %>%
   mutate(ScientificName = replace(ScientificName,
     (IdCensus == sampleCens$IdCensus[1] &
-      IdTree == sampleInd),
+       IdTree == sampleInd),
     values = "Blu blubblu"
   ))
 data_cor <- data_cor %>%
   mutate(ScientificName = replace(ScientificName,
     (IdCensus == sampleCens$IdCensus[2] &
-      IdTree == sampleInd),
+       IdTree == sampleInd),
     values = "Blo blobblo"
   ))
-# data_cor %>%
-#   filter(ScientificName %in% c("Bla blabbla", "Bli blibbli",
-# "Blu blubblu", "Blo blobblo")) %>%
-#   select(IdTree)
+# data_cor %>% filter(ScientificName %in% c("Bla blabbla", "Bli blibbli", "Blu blubblu", "Blo blobblo")) %>%  select(IdTree) # nolint
 ```
     
 
