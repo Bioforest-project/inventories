@@ -790,6 +790,20 @@ data_cor |>
   theme_classic()
 ```
 
+```{r}
+data_aggr <- data_cor |> 
+  ungroup() |> 
+  select(Site, Plot, Subplot, Year) |> 
+  unique()
+```
+
 # Biodiversity metrics
 
+
+# Basal area 
+
 # Aboveground biomass
+
+## AGB stocks
+
+## AGB fluxes
