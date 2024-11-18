@@ -816,7 +816,7 @@ data_cor <-
 data_cor$wd <- with(data_cor, getWoodDensity(
   genus = Genus_cor,
   species = Species_cor,
-  stand = paste(Plot, Year)
+  stand = paste(Plot, Subplot, Year)
 )$meanWD)
 ```
 
@@ -827,8 +827,29 @@ data_cor$agb <- with(
   data_cor,
   computeAGB(D = diameter_cor, WD = wd, coord = c(11, 0))
 )
+data_cor <- data_cor |>
+  group_by(IdTree) |>
+  mutate(diff_agb = c(NA, diff(agb)) / diff_year)
 ```
 
 ## AGB stocks
+
+```{r}
+data_aggr <-
+  data_cor |>
+  group_by(Plot, Subplot, Year) |>
+  summarise(
+    agb = sum(agb / SubplotArea)
+  ) |>
+  merge(data_aggr)
+```
+```{r}
+data_aggr |>
+  ggplot(aes(x = Year, y = agb, color = factor(Plot), group = Subplot)) +
+  geom_point() +
+  geom_line() +
+  labs(y = "Aboveground biomass (t/ha)", col = "Plot") +
+  theme_classic()
+```
 
 ## AGB fluxes
