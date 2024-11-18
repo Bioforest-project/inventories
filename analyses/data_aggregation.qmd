@@ -853,3 +853,77 @@ data_aggr |>
 ```
 
 ## AGB fluxes
+
+
+```{r tree-status}
+# trees on year of recruitment (or when changing classes): status = "R" for
+# recruited tree. First year of measurement by tree and size class:
+data_year <- data_aggr |>
+  select(Plot, Subplot, Year) |>
+  group_by(Plot, Subplot) |>
+  mutate(
+    prev_census = c(NA, Year[-length(Year)]),
+    next_census = c(Year[-1], NA)
+  ) |>
+  ungroup()
+
+data_cor <- data_cor |>
+  merge(data_year) |>
+  group_by(IdTree) |>
+  mutate(recr_year = min(Year), mort_year = max(Year)) |>
+  ungroup() |>
+  mutate(
+    first_census = min(Year),
+    status = ifelse(Year == recr_year & Year != first_census, "R", "A")
+  )
+```
+
+```{r recruitment}
+data_aggr <- data_cor |>
+  subset(Year == recr_year & Year != first_census) |>
+  group_by(Plot, Subplot, Year) |>
+  summarise(
+    agb_recr = sum(agb / (Year - prev_census) / SubplotArea, na.rm = TRUE)
+  ) |>
+  merge(data_aggr)
+
+data_aggr |>
+  ggplot(aes(x = Year, y = agb_recr, color = factor(Plot), group = Subplot)) +
+  geom_point() +
+  geom_line() +
+  labs(y = "Aboveground biomass recruitment (t/ha/yr)", col = "Plot") +
+  theme_classic()
+```
+
+```{r growth}
+data_aggr <- data_cor |>
+  subset(Year != recr_year) |>
+  group_by(Plot, Subplot, Year) |>
+  summarise(agb_growth = sum(diff_agb / SubplotArea)) |>
+  merge(data_aggr)
+
+data_aggr |>
+  ggplot(aes(x = Year, y = agb_growth, color = factor(Plot), group = Subplot)) +
+  geom_point() +
+  geom_line() +
+  labs(y = "Aboveground biomass growth (t/ha/yr)", col = "Plot") +
+  theme_classic()
+```
+
+
+```{r mort}
+data_aggr <- data_cor |>
+  subset(Year == mort_year) |>
+  group_by(Plot, Subplot, Year, next_census) |>
+  summarise(agb_mort = sum(agb / (next_census - Year) / SubplotArea)) |>
+  mutate(Year = next_census) |>
+  select(Plot, Subplot, Year, agb_mort) |>
+  merge(data_aggr)
+
+data_aggr |>
+  ggplot(aes(x = Year, y = agb_mort, color = factor(Plot), group = Subplot)) +
+  geom_point() +
+  geom_line() +
+  labs(y = "Aboveground biomass mortality (t/ha/yr)", col = "Plot") +
+  theme_classic()
+```
