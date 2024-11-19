@@ -819,20 +819,26 @@ data_cor$wd <- with(data_cor, getWoodDensity(
   stand = paste(Plot, Subplot, Year)
 )$meanWD)
 ```
+We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground biomass. 
 
 > need to add plot coordinates; temporarily use random coordinates
 
 ```{r}
-data_cor$agb <- with(
-  data_cor,
-  computeAGB(D = diameter_cor, WD = wd, coord = c(11, 0))
-)
+e_var <- computeE(c(11, 0))
+agb_func <- function(d, wd) {
+  return(exp(-2.023977 - 0.89563505 * e_var + 0.92023559 *
+               log(wd) + 2.79495823 * log(d) - 0.04606298 * (log(d)^2)) / 1000)
+}
 data_cor <- data_cor |>
-  group_by(IdTree) |>
-  mutate(diff_agb = c(NA, diff(agb)) / diff_year)
+  mutate(
+    agb = agb_func(diameter_cor, wd),
+    agb_growth = agb_func(diameter_cor - diam_growth + diam_growth_cor, wd) -
+      agb_func(diameter_cor - diam_growth, wd)
+  )
 ```
 
 ## AGB stocks
+
 
 ```{r}
 data_aggr <-
@@ -841,8 +847,9 @@ data_aggr <-
   summarise(
     agb = sum(agb / SubplotArea)
   ) |>
-  merge(data_aggr)
+  merge(data_aggr, all.y = TRUE)
 ```
+
 ```{r}
 data_aggr |>
   ggplot(aes(x = Year, y = agb, color = factor(Plot), group = Subplot)) +
@@ -854,10 +861,8 @@ data_aggr |>
 
 ## AGB fluxes
 
-
-```{r tree-status}
-# trees on year of recruitment (or when changing classes): status = "R" for
-# recruited tree. First year of measurement by tree and size class:
+```{r}
+# for each census year, add information on previous and next census years
 data_year <- data_aggr |>
   select(Plot, Subplot, Year) |>
   group_by(Plot, Subplot) |>
@@ -867,25 +872,21 @@ data_year <- data_aggr |>
   ) |>
   ungroup()
 
+# add information on each tree's recruitment and mortality years
 data_cor <- data_cor |>
   merge(data_year) |>
-  group_by(IdTree) |>
-  mutate(recr_year = min(Year), mort_year = max(Year)) |>
-  ungroup() |>
-  mutate(
-    first_census = min(Year),
-    status = ifelse(Year == recr_year & Year != first_census, "R", "A")
-  )
+  mutate(recr_year = min(Year), mort_year = max(Year), .by = IdTree)
 ```
 
 ```{r recruitment}
 data_aggr <- data_cor |>
-  subset(Year == recr_year & Year != first_census) |>
+  # agb recruitment per tree
+  mutate(recr = ifelse(Year == recr_year, agb / (Year - prev_census), 0)) |>
   group_by(Plot, Subplot, Year) |>
   summarise(
-    agb_recr = sum(agb / (Year - prev_census) / SubplotArea, na.rm = TRUE)
+    agb_recr = sum(recr / SubplotArea)
   ) |>
-  merge(data_aggr)
+  merge(data_aggr, all.y = TRUE)
 
 data_aggr |>
   ggplot(aes(x = Year, y = agb_recr, color = factor(Plot), group = Subplot)) +
@@ -897,10 +898,10 @@ data_aggr |>
 
 ```{r growth}
 data_aggr <- data_cor |>
-  subset(Year != recr_year) |>
+  mutate(agb_gr_yr = agb_growth / (Year - prev_census)) |>
   group_by(Plot, Subplot, Year) |>
-  summarise(agb_growth = sum(diff_agb / SubplotArea)) |>
-  merge(data_aggr)
+  summarise(agb_growth = sum(agb_gr_yr / SubplotArea, na.rm = TRUE)) |>
+  merge(data_aggr, all.y = TRUE)
 
 data_aggr |>
   ggplot(aes(x = Year, y = agb_growth, color = factor(Plot), group = Subplot)) +
@@ -918,7 +919,7 @@ data_aggr <- data_cor |>
   summarise(agb_mort = sum(agb / (next_census - Year) / SubplotArea)) |>
   mutate(Year = next_census) |>
   select(Plot, Subplot, Year, agb_mort) |>
-  merge(data_aggr)
+  merge(data_aggr, all.y = TRUE)
 
 data_aggr |>
   ggplot(aes(x = Year, y = agb_mort, color = factor(Plot), group = Subplot)) +
