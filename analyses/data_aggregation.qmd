@@ -724,14 +724,13 @@ data_cor <- data_cor |>
   mutate(average_growth = mean(diam_growth[!outlier], na.rm = TRUE)) |>
   mutate(diam_growth_cor = ifelse(outlier, average_growth, diam_growth))
 
-data_cor |>
-  ggplot(aes(
-    x = diameter_cor, y = diam_growth,
-    color = (diam_growth >= dgrowth_lower & diam_growth <= dgrowth_upper)
-  )) +
+data_cor[sample(which(data_cor$diameter_cor < 50), 1e4),] |> 
+  rbind(subset(data_cor, diameter_cor >= 50)) |> 
+  ggplot(aes(x = diameter_cor, y = diam_growth, color = (outlier))) +
   geom_point() +
-  labs(x = "Diameter (cm)", y = "Diameter growth (cm/yr)", col = "outlier?") +
-  scale_x_log10() +
+  labs(x = "Diameter (cm)", y = "Diameter growth (cm/yr)") +
+  scale_x_log10() + 
+  scale_color_manual(values = c("black", "red")) +
   theme_classic()
 ```
 
