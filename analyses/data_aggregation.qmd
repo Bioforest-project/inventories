@@ -722,19 +722,31 @@ data_cor <- data_cor |>
   mutate(dgrowth_upper = quantile(diam_growth, 0.99, na.rm = TRUE)) |>
   mutate(outlier = diam_growth < dgrowth_lower | diam_growth > dgrowth_upper) |>
   mutate(average_growth = mean(diam_growth[!outlier], na.rm = TRUE)) |>
+  ungroup() |> 
   mutate(diam_growth_cor = ifelse(outlier, average_growth, diam_growth))
 
-data_cor[sample(which(data_cor$diameter_cor < 50), 1e4),] |> 
-  rbind(subset(data_cor, diameter_cor >= 50)) |> 
-  ggplot(aes(x = diameter_cor, y = diam_growth, color = (outlier))) +
+data_thresh <- data_cor |> 
+  group_by(diam_quant) |> 
+  summarise(diam_min = min(diameter_cor), 
+            diam_max = max(diameter_cor), 
+            dgrowth_upper = unique(dgrowth_upper), 
+            dgrowth_lower = unique(dgrowth_lower), 
+            average_growth = unique(average_growth)
+            ) |> 
+  pivot_longer(cols = c("diam_max", "diam_min"))
+data_cor |> 
+  subset(outlier) |> 
+  ggplot(aes(x = diameter_cor, y = diam_growth)) +
   geom_point() +
+  geom_line(data = data_thresh, aes(x = value, y = dgrowth_upper), col = 2) +
+  geom_line(data = data_thresh, aes(x = value, y = dgrowth_lower), col = 2) +
+  geom_line(data = data_thresh, aes(x = value, y = average_growth), col = 4) +
   labs(x = "Diameter (cm)", y = "Diameter growth (cm/yr)") +
-  scale_x_log10() + 
-  scale_color_manual(values = c("black", "red")) +
+  scale_x_log10() +
   theme_classic()
 ```
 
-This graph shows all DBH growth values (in cm/yr) ... 
+This graph shows all outlier DBH growth values (in cm/yr), as well as the lower and upper bounds of "acceptable" DBH growth (in red) and the average DBH growth with which outlier values are replaced (blue), as a function of tree DBH.  
 
 ### Shift DBH series
 
