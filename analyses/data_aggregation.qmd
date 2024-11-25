@@ -709,19 +709,33 @@ data_cor <- data_cor |>
 
 ### Define DBH change threshold
 
+> proposal: use general threshold for lower bound, and moving 99th (or 95th) percentile for upper bound
+
+DBH thresholds are defined by size class: trees DBH are split into 20 quantiles. The 99th DBH growth value per quantile is defined as the upper limit above with DBH growth values are considered outliers. The lower DBH growht limit is defined as the 1st percentile of DBH growth for all trees. 
+
 ```{r}
-gr_range <- quantile(data_cor$diam_growth, c(0.01, 0.99), na.rm = TRUE)
-subset(
-  data_cor,
-  diam_growth >= gr_range[1] & diam_growth <= gr_range[2]
-) |>
-  ggplot(aes(x = diam_growth)) +
-  geom_histogram(aes(fill = factor(Plot)), binwidth = 0.1) +
-  labs(x = "Diameter growth (cm/yr)", fill = "Plot") +
+data_cor <- data_cor |>
+  ungroup() |>
+  mutate(diam_quant = ntile(diameter_cor, 20)) |>
+  mutate(dgrowth_lower = quantile(diam_growth, 0.01, na.rm = TRUE)) |>
+  group_by(diam_quant) |>
+  mutate(dgrowth_upper = quantile(diam_growth, 0.99, na.rm = TRUE)) |>
+  mutate(outlier = diam_growth < dgrowth_lower | diam_growth > dgrowth_upper) |>
+  mutate(average_growth = mean(diam_growth[!outlier], na.rm = TRUE)) |>
+  mutate(diam_growth_cor = ifelse(outlier, average_growth, diam_growth))
+
+data_cor |>
+  ggplot(aes(
+    x = diameter_cor, y = diam_growth,
+    color = (diam_growth >= dgrowth_lower & diam_growth <= dgrowth_upper)
+  )) +
+  geom_point() +
+  labs(x = "Diameter (cm)", y = "Diameter growth (cm/yr)", col = "outlier?") +
+  scale_x_log10() +
   theme_classic()
 ```
 
-This graph shows all DBH growth values (in cm/yr) between the first and the 99th percentiles, i.e. between `r gr_range[1]` and `r gr_range[2]` cm/yr. All values of DBH growth outside this range are considered outliers. 
+This graph shows all DBH growth values (in cm/yr) ... 
 
 ### Shift DBH series
 
@@ -740,34 +754,12 @@ data_cor <- data_cor |>
 
 Outliers in DBH growth (but not DBHs) are replaced by mean DBH growth. DBH growth values are considered outliers when their value is less than the 1st percentile of DBH growth values (`r gr_range[1]`) or greater than the 99th percentile (`r gr_range[2]`).
 
-Note: 
-
-- Should we define thresholds and/or values to be replaced by group? size class, species groups? limitation: certain size classes (e.g. large trees) or other groups could be more prone to errors, which could create biases. 
-
-- Replacement by average DBH growth values is not optimal; it may introduce bias depending on the variable being estimated. For example, for AGB productivity it would be better to use average AGB.
-
-```{r}
-average_growth <- data_cor |>
-  subset(diam_growth >= gr_range[1] & diam_growth <= gr_range[2]) |>
-  with(mean(diam_growth, na.rm = TRUE))
-
-data_cor <- data_cor |>
-  mutate(diam_growth_cor = ifelse(
-    !is.na(diam_growth) &
-      (diam_growth < gr_range[1] | diam_growth > gr_range[2]),
-    average_growth,
-    diam_growth
-  ))
-```
+> Replacement by average DBH growth values is not optimal; it may introduce bias depending on the variable being estimated. For example, for AGB productivity it would be better to use average AGB.
 
 `r with(data_cor, sum(diam_growth_cor != diam_growth & !is.na(diam_growth_cor)))` outlier DBH growth values were substituted. The following graph shows a subset of trees where the most DBH growth values were substituted. 
 
 ```{r}
-id_cor <-
-  subset(
-    data_cor,
-    diam_growth_cor != diam_growth & !is.na(diam_growth_cor)
-  )$IdTree
+id_cor <- subset(data_cor, outlier)$IdTree
 tree_subs <-
   data_cor |>
   subset(IdTree %in% id_cor) |>
@@ -779,10 +771,9 @@ tree_subs <-
 
 data_cor |>
   subset(IdTree %in% tree_subs$IdTree[1:6]) |>
-  mutate(subs = diam_growth_cor != diam_growth & !is.na(diam_growth_cor)) |>
   pivot_longer(cols = c("diam_growth", "diameter_cor")) |>
   ggplot(aes(x = Year)) +
-  geom_point(aes(y = value, col = subs)) +
+  geom_point(aes(y = value, col = outlier)) +
   labs(col = "Outlier DBH growth?") +
   scale_color_manual(values = c("black", "red")) +
   facet_grid(name ~ IdTree, scales = "free") +
