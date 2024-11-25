@@ -752,7 +752,7 @@ data_cor <- data_cor |>
 
 ### Substitute excessive DBH changes
 
-Outliers in DBH growth (but not DBHs) are replaced by mean DBH growth. DBH growth values are considered outliers when their value is less than the 1st percentile of DBH growth values (`r gr_range[1]`) or greater than the 99th percentile (`r gr_range[2]`).
+Outliers in DBH growth (but not DBHs) are replaced by the mean DBH growth of the corresponding size class (after excluding outlier values). 
 
 > Replacement by average DBH growth values is not optimal; it may introduce bias depending on the variable being estimated. For example, for AGB productivity it would be better to use average AGB.
 
@@ -815,7 +815,8 @@ We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground bi
 > need to add plot coordinates; temporarily use random coordinates
 
 ```{r}
-e_var <- computeE(c(11, 0))
+# e_var <- computeE(c(11, 0)) #nolint
+e_var <- 0
 agb_func <- function(d, wd) {
   return(exp(-2.023977 - 0.89563505 * e_var + 0.92023559 *
                log(wd) + 2.79495823 * log(d) - 0.04606298 * (log(d)^2)) / 1000)
