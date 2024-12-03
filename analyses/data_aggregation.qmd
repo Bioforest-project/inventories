@@ -722,20 +722,21 @@ data_cor <- data_cor |>
   mutate(dgrowth_upper = quantile(diam_growth, 0.99, na.rm = TRUE)) |>
   mutate(outlier = diam_growth < dgrowth_lower | diam_growth > dgrowth_upper) |>
   mutate(average_growth = mean(diam_growth[!outlier], na.rm = TRUE)) |>
-  ungroup() |> 
+  ungroup() |>
   mutate(diam_growth_cor = ifelse(outlier, average_growth, diam_growth))
 
-data_thresh <- data_cor |> 
-  group_by(diam_quant) |> 
-  summarise(diam_min = min(diameter_cor), 
-            diam_max = max(diameter_cor), 
-            dgrowth_upper = unique(dgrowth_upper), 
-            dgrowth_lower = unique(dgrowth_lower), 
-            average_growth = unique(average_growth)
-            ) |> 
+data_thresh <- data_cor |>
+  group_by(diam_quant) |>
+  summarise(
+    diam_min = min(diameter_cor),
+    diam_max = max(diameter_cor),
+    dgrowth_upper = unique(dgrowth_upper),
+    dgrowth_lower = unique(dgrowth_lower),
+    average_growth = unique(average_growth)
+  ) |>
   pivot_longer(cols = c("diam_max", "diam_min"))
-data_cor |> 
-  subset(outlier) |> 
+data_cor |>
+  subset(outlier) |>
   ggplot(aes(x = diameter_cor, y = diam_growth)) +
   geom_point() +
   geom_line(data = data_thresh, aes(x = value, y = dgrowth_upper), col = 2) +
