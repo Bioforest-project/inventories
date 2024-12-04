@@ -600,7 +600,13 @@ Note: We did not use the equation from Cushman et al. (2020) because, although i
 
 
 ```{r}
-source("r/taper.R")
+taper <- function(diam, hom) {
+  # default hom (no correction) when there is no reliable information
+  hom[is.na(hom) | hom <= 0 | hom > 20] <- 1.3
+  b <- exp(-2.0205 - 0.5053 * log(diam) + 0.3748 * log(hom))
+  return(diam * exp(b * (hom - 1.3)))
+}
+
 if (any(colnames(data_cor) == "HOM")) {
   text <- paste(
     "The height of measurement information is available so we could apply the",
@@ -631,7 +637,13 @@ If trees are missed in a census and remeasured in a later census, we use the DBH
 This may lead to bias in the first and last censuses, where missed DBHs cannot be detected. We need to check that recruitment and mortality rates are not systematically lower in these two censuses. 
 
 ```{r}
-source("r/interpolate.R")
+interpolate <- function(diam, years) {
+  if (sum(!is.na(diam)) > 1) {
+    return(approx(years, diam, years)$y)
+  } else {
+    return(diam)
+  }
+}
 
 # columns with tree-level information in data_cor
 col_tree <-
