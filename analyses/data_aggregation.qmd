@@ -45,7 +45,7 @@ Checklist:
 
 ```{r load data}
 # data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")  # nolint
-data_raw <- read.csv("data/raw_data/harmonized_data_mbaiki_v1.csv")
+data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv")
 ```
 
 # General presentation of the data
@@ -67,9 +67,18 @@ Censuses were conducted between `r min(data_raw$Year)` and `r max(data_raw$Year)
 
 *Please add a comment on question XXXX of the survey, if there are missing plots or censuses.*
 
+
 # Check data consistency
 
 This step checks for the absence of "anomalies" in the data.
+
+## Creat unique IDtree
+
+We paste the name of the plot, the subplot and the tag/ID of the tree to create a new unique identifier for each tree. 
+
+```{r}
+data_raw$IdTree <- paste(data_raw$Plot, data_raw$Subplot, data_raw$IdTree)
+```
 
 ## No NA values in DBH
 
@@ -613,7 +622,7 @@ if (any(colnames(data_cor) == "HOM")) {
     "taper correction from Cushman et al., 2014."
   )
   data_cor$diameter_cor <- taper(data_cor$diameter_cor, data_cor$HOM)
-  subset(data_cor, HOM > 1.3) |>
+  subset(data_cor, HOM != 1.3) |>
     ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
     geom_abline(intercept = 0, slope = 1, lty = 2) +
     geom_point() +
@@ -868,7 +877,10 @@ data_aggr <-
 
 ```{r}
 data_aggr |>
-  ggplot(aes(x = Year, y = agb, color = factor(Plot), group = Subplot)) +
+  ggplot(aes(
+    x = Year, y = agb, color = factor(Plot),
+    group = paste(Plot, Subplot)
+  )) +
   geom_point() +
   geom_line() +
   labs(y = "Aboveground biomass (t/ha)", col = "Plot") +
@@ -905,7 +917,10 @@ data_aggr <- data_cor |>
   merge(data_aggr, all.y = TRUE)
 
 data_aggr |>
-  ggplot(aes(x = Year, y = agb_recr, color = factor(Plot), group = Subplot)) +
+  ggplot(aes(
+    x = Year, y = agb_recr, color = factor(Plot),
+    group = paste(Plot, Subplot)
+  )) +
   geom_point() +
   geom_line() +
   labs(y = "Aboveground biomass recruitment (t/ha/yr)", col = "Plot") +
@@ -920,7 +935,10 @@ data_aggr <- data_cor |>
   merge(data_aggr, all.y = TRUE)
 
 data_aggr |>
-  ggplot(aes(x = Year, y = agb_growth, color = factor(Plot), group = Subplot)) +
+  ggplot(aes(
+    x = Year, y = agb_growth, color = factor(Plot),
+    group = paste(Plot, Subplot)
+  )) +
   geom_point() +
   geom_line() +
   labs(y = "Aboveground biomass growth (t/ha/yr)", col = "Plot") +
@@ -938,7 +956,10 @@ data_aggr <- data_cor |>
   merge(data_aggr, all.y = TRUE)
 
 data_aggr |>
-  ggplot(aes(x = Year, y = agb_mort, color = factor(Plot), group = Subplot)) +
+  ggplot(aes(
+    x = Year, y = agb_mort, color = factor(Plot),
+    group = paste(Plot, Subplot)
+  )) +
   geom_point() +
   geom_line() +
   labs(y = "Aboveground biomass mortality (t/ha/yr)", col = "Plot") +
