@@ -72,12 +72,17 @@ Censuses were conducted between `r min(data_raw$Year)` and `r max(data_raw$Year)
 
 This step checks for the absence of "anomalies" in the data.
 
-## Creat unique IDtree
+## Creat unique IdStem
 
-We paste the name of the plot, the subplot and the tag/ID of the tree to create a new unique identifier for each tree. 
+We paste the name of the plot, the subplot and the tag/ID of the tree and stem to create a new unique identifier for each stem.
 
 ```{r}
-data_raw$IdTree <- paste(data_raw$Plot, data_raw$Subplot, data_raw$IdTree)
+data_raw$IdStem <- paste(
+  data_raw$Plot, 
+  data_raw$Subplot, 
+  data_raw$IdTree, 
+  data_raw$IdStem, 
+  sep = "_")
 ```
 
 ## No NA values in DBH
@@ -202,9 +207,9 @@ dupl <- dupl %>%
   )) # one duplicated with different DBH
 data_cor <- rbind(data_cor, dupl)
 data_cor <- rbind(data_cor, slice_sample(dupl, n = 3)) # some duplicated twice
-data_cor %>%
+dupl_sev_census <- data_cor %>%
   filter(IdStem == dupl$IdStem[2]) %>%
-  slice_sample(, n = 2) -> dupl_sev_census # one IDstem with several duplicated censuses #nolint
+  slice_sample(, n = 2) # one IDstem with several duplicated censuses 
 data_cor <- rbind(data_cor, dupl_sev_census)
 ```
 
@@ -240,13 +245,13 @@ if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
 if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
   prev_nb_obs <- dim(data_cor)[1]
   data_cor <- data_cor %>% distinct() # remove fully duplicated rows
-  if (prev_nb_obs - dim(data_cor)[1] != 0) { # if there were some fully duplicated rows #nolint
+  # if there were some fully duplicated rows:
+  if (prev_nb_obs - dim(data_cor)[1] != 0) {  
     text <- paste(
       prev_nb_obs - dim(data_cor)[1],
       "rows are true duplicates (fully identical rows).",
-      "These true duplicates are removed from the dataset, leaving a dataset of ", # nolint
-      dim(data_cor)[1],
-      " observations."
+      "These true duplicates are removed from the dataset,",
+      "leaving a dataset of", dim(data_cor)[1], "observations."
     )
   } else {
     text <- ""
@@ -295,7 +300,13 @@ if (still_stem_dupli == TRUE) {
 
 ```{r warn_still_duplicate}
 if (still_stem_dupli == TRUE) {
-  text <- "IMPORTANT: Please check this cases in your raw data before starting the process again." # nolint
+  text <- paste(
+    "IMPORTANT: Please check these cases in your raw data before starting the", 
+    "process again. For now, we have only kept the first measurement of these", 
+    "duplicate stems, but please let us know how we can better deal with these", 
+    "duplicate measurements.") 
+  data_cor <- data_cor |> 
+    subset(!duplicated(paste(IdStem, Year)))
 } else {
   text <- ""
 }
@@ -666,21 +677,21 @@ missing_censuses <- data_cor |>
   group_by(Plot, Subplot) |>
   reframe(Year = unique(Year)) |>
   ungroup() |>
-  # add all combinations of IdTree x IdCensus (by Plot and Subplot)
+  # add all combinations of IdStem x IdCensus (by Plot and Subplot)
   merge(
-    unique(data_cor[, c("Plot", "Subplot", "IdTree")]),
+    unique(data_cor[, c("Plot", "Subplot", "IdStem")]),
     by = c("Plot", "Subplot")
   ) |>
   # add tree-level information
   merge(unique(data_cor[, col_tree])) |>
   # add DBH information
   merge(
-    data_cor[, c("IdTree", "Year", "diameter_cor")],
-    by = c("IdTree", "Year"),
+    data_cor[, c("IdStem", "Year", "diameter_cor")],
+    by = c("IdStem", "Year"),
     all = TRUE
   ) |>
   # interpolate missing diameters
-  group_by(IdTree) |>
+  group_by(IdStem) |>
   mutate(
     diameter_cor = interpolate(diameter_cor, Year)
   ) |>
@@ -699,13 +710,13 @@ if (sum(is.na(data_cor$Diameter)) > 0) {
     sum(is.na(data_cor$Diameter)),
     "missing DBH values were interpolated."
   )
-  illustration <- sample(subset(data_cor, is.na(Diameter))$IdTree, 12)
-  subset(data_cor, IdTree %in% illustration) |>
+  illustration <- sample(subset(data_cor, is.na(Diameter))$IdStem, 12)
+  subset(data_cor, IdStem %in% illustration) |>
     ggplot(aes(x = Year, y = diameter_cor)) +
     geom_point(aes(col = is.na(Diameter))) +
     labs(x = "Census year", y = "Diameter (cm)", col = "Interpolated") +
     scale_color_manual(values = c("black", "red")) +
-    facet_wrap(~IdTree, scales = "free") +
+    facet_wrap(~IdStem, scales = "free") +
     theme_classic() +
     theme(legend.position = "bottom")
 } else {
@@ -721,7 +732,7 @@ if (sum(is.na(data_cor$Diameter)) > 0) {
 
 ```{r}
 data_cor <- data_cor |>
-  group_by(IdTree) |>
+  group_by(IdStem) |>
   mutate(
     diam_growth = c(NA, diff(diameter_cor)) / c(NA, diff(Year)),
     diff_year = c(NA, diff(Year))
@@ -776,7 +787,7 @@ When there is a reported change in height of measurement but the new height of m
 
 ```{r}
 data_cor <- data_cor |>
-  group_by(IdTree) |>
+  group_by(IdStem) |>
   mutate(
     hom_increase = c(NA, diff(HOM) > 0)
   )
@@ -792,24 +803,24 @@ Outliers in DBH growth (but not DBHs) are replaced by the mean DBH growth of the
 `r with(data_cor, sum(diam_growth_cor != diam_growth & !is.na(diam_growth_cor)))` outlier DBH growth values were substituted. The following graph shows a subset of trees where the most DBH growth values were substituted. 
 
 ```{r}
-id_cor <- subset(data_cor, outlier)$IdTree
+id_cor <- subset(data_cor, outlier)$IdStem
 tree_subs <-
   data_cor |>
-  subset(IdTree %in% id_cor) |>
-  group_by(IdTree) |>
+  subset(IdStem %in% id_cor) |>
+  group_by(IdStem) |>
   summarise(
     nsubs = sum(diam_growth_cor != diam_growth & !is.na(diam_growth_cor))
   ) |>
   arrange(desc(nsubs))
 
 data_cor |>
-  subset(IdTree %in% tree_subs$IdTree[1:6]) |>
+  subset(IdStem %in% tree_subs$IdStem[1:6]) |>
   pivot_longer(cols = c("diam_growth", "diameter_cor")) |>
   ggplot(aes(x = Year)) +
   geom_point(aes(y = value, col = outlier)) +
   labs(col = "Outlier DBH growth?") +
   scale_color_manual(values = c("black", "red")) +
-  facet_grid(name ~ IdTree, scales = "free") +
+  facet_grid(name ~ IdStem, scales = "free") +
   theme_classic()
 ```
 
@@ -818,6 +829,16 @@ data_aggr <- data_cor |>
   ungroup() |>
   select(Site, Plot, Subplot, Year) |>
   unique()
+```
+
+```{r}
+# add subplotarea information when missing
+if (!("SubplotArea" %in% colnames(data_cor))) {
+  data_cor <- data_cor |> 
+    group_by(Plot) |> 
+    mutate(SubplotArea = unique(PlotArea) / length(unique(Subplot))) |> 
+    ungroup()
+}
 ```
 
 # Biodiversity metrics
@@ -834,7 +855,8 @@ data_cor <-
   data_cor |>
   ungroup() |>
   separate_wider_delim(ScientificName_cor, " ",
-    names = c("Genus_cor", "Species_cor"), too_many = "drop"
+    names = c("Genus_cor", "Species_cor"), 
+    too_many = "drop", too_few = "align_start"
   )
 
 data_cor$wd <- with(data_cor, getWoodDensity(
@@ -903,7 +925,7 @@ data_year <- data_aggr |>
 # add information on each tree's recruitment and mortality years
 data_cor <- data_cor |>
   merge(data_year) |>
-  mutate(recr_year = min(Year), mort_year = max(Year), .by = IdTree)
+  mutate(recr_year = min(Year), mort_year = max(Year), .by = IdStem)
 ```
 
 ```{r recruitment}
