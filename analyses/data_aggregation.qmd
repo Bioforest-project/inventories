@@ -15,6 +15,7 @@ library(data.table)
 library(BIOMASS)
 library(ggplot2)
 library(tidyverse)
+library(entropart)
 ```
 
 <!-- TO DO
@@ -44,8 +45,8 @@ Checklist:
 <!-- Load the data -->
 
 ```{r load data}
-# data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")  # nolint
-data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv")
+ data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")  # nolint
+#data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv")
 ```
 
 # General presentation of the data
@@ -841,8 +842,40 @@ if (!("SubplotArea" %in% colnames(data_cor))) {
 }
 ```
 
-# Biodiversity metrics
+# Diversity metrics
 
+```{r}
+
+# Calculate diversity indices per plot and year
+
+  # Count species occurrences/abundance by plot and year
+  species_count <- data_cor %>%
+    group_by(Plot, Year, ScientificName) %>%
+    summarise(count = n(), .groups = "drop")
+
+  # Calculate neutral diversity indices per plot and year
+  neutral_div <- species_count %>%
+    group_by(Plot, Year) %>%
+    summarise(
+      species_richness = n_distinct(ScientificName),
+      shannon_entropy = as.numeric(Shannon(count)),
+      simpson_index = 1 - as.numeric(Simpson(count)),
+      evenness = as.numeric(Shannon(count)) / log(n_distinct(ScientificName)))
+  
+  # Change data to long format to plot all indices together    
+  results_long <- neutral_div %>%
+    pivot_longer(cols = c(species_richness, shannon_entropy, simpson_index, evenness), names_to = "index", values_to = "value")
+
+  # Plot temporal trajectories of different indices across plots
+  div_plot <- ggplot(results_long, aes(x = Year, y = value, color = as.factor(Plot))) + 
+    geom_line() +
+    facet_wrap(~index, scales = "free_y") +
+    labs(title = "Diversity Indices Across Plots and Years", x = "Year", y = "Index Value", color = "Plot" ) +
+    theme_minimal()
+  
+print(div_plot)  
+  
+```
 
 # Basal area 
 
