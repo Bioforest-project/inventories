@@ -45,9 +45,18 @@ Checklist:
 <!-- Load the data -->
 
 ```{r load data}
-data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")
-# data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv") # nolint
+single_site <- TRUE
+if (single_site) {
+  data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")
+  # data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv") # nolint
+} else {
+  data_raw <-
+    list.files("data/raw_data/", pattern = "harmonized", full.names = TRUE) |>
+    lapply(read.csv) |>
+    rbindlist(fill = TRUE)
+}
 ```
+
 
 # General presentation of the data
 
@@ -59,7 +68,7 @@ The following table shows the number of censuses per plots.
 
 ```{r censusNb}
 data_raw %>%
-  group_by(Plot) %>%
+  group_by(Site, Plot) %>%
   summarise(census_number = length(unique(IdCensus))) %>%
   knitr::kable()
 ```
@@ -75,16 +84,11 @@ This step checks for the absence of "anomalies" in the data.
 
 ## Creat unique IdStem
 
-We paste the name of the plot, the subplot and the tag/ID of the tree and stem to create a new unique identifier for each stem.
+We paste the name of the site, plot, subplot and tag/ID of the tree and stem to create a new unique identifier for each stem.
 
 ```{r}
-data_raw$IdStem <- paste(
-  data_raw$Plot,
-  data_raw$Subplot,
-  data_raw$IdTree,
-  data_raw$IdStem,
-  sep = "_"
-)
+data_raw <- data_raw |>
+  mutate(IdStem = paste(Site, Plot, Subplot, IdTree, IdStem, sep = "_"))
 ```
 
 ## No NA values in DBH
@@ -100,8 +104,9 @@ if (anyNA(data_raw$Diameter)) {
     nb_na_dbh,
     "missing diameters in the data, which represent",
     perc_na_dbh,
-    "% of the observations.
-    The missing values are distributed across the plots and censuses as follow:.", # nolint
+    "% of the observations.",
+    "The missing values are distributed across the plots",
+    "and censuses as follow:.",
     sep = " "
   )
 } else {
