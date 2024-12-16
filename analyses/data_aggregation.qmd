@@ -827,6 +827,8 @@ data_cor |>
   theme_classic()
 ```
 
+# Data aggregation
+
 ```{r}
 data_aggr <- data_cor |>
   ungroup() |>
@@ -844,7 +846,7 @@ if (!("SubplotArea" %in% colnames(data_cor))) {
 }
 ```
 
-# Diversity metrics
+## Diversity metrics
 
 ```{r}
 # Calculate diversity indices per plot and year
@@ -863,6 +865,9 @@ neutral_div <- species_count %>%
     simpson_index = 1 - as.numeric(Simpson(count)),
     evenness = as.numeric(Shannon(count)) / log(n_distinct(ScientificName))
   )
+
+# Add to main dataframe with aggregatd data
+data_aggr <- merge(data_aggr, neutral_div)
 
 # Change data to long format to plot all indices together
 results_long <- neutral_div %>%
@@ -886,9 +891,9 @@ div_plot <-
 print(div_plot)
 ```
 
-# Basal area 
+## Basal area 
 
-# Aboveground biomass
+## Aboveground biomass
 
 > For now use wood density from BIOMASS package; will be changed later to use the consolidated species list. 
 
@@ -916,7 +921,7 @@ We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground bi
 e_var <- 0
 agb_func <- function(d, wd) {
   return(exp(-2.023977 - 0.89563505 * e_var + 0.92023559 * log(wd) +
-               2.79495823 * log(d) - 0.04606298 * (log(d)^2)) / 1000)
+    2.79495823 * log(d) - 0.04606298 * (log(d)^2)) / 1000) # nolint
 }
 data_cor <- data_cor |>
   mutate(
@@ -926,7 +931,7 @@ data_cor <- data_cor |>
   )
 ```
 
-## AGB stocks
+### AGB stocks
 
 
 ```{r}
@@ -951,7 +956,7 @@ data_aggr |>
   theme_classic()
 ```
 
-## AGB fluxes
+### AGB fluxes
 
 ```{r}
 # for each census year, add information on previous and next census years
