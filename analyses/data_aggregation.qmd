@@ -45,8 +45,8 @@ Checklist:
 <!-- Load the data -->
 
 ```{r load data}
- data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")  # nolint
-#data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv")
+data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")
+# data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv") # nolint
 ```
 
 # General presentation of the data
@@ -79,11 +79,12 @@ We paste the name of the plot, the subplot and the tag/ID of the tree and stem t
 
 ```{r}
 data_raw$IdStem <- paste(
-  data_raw$Plot, 
-  data_raw$Subplot, 
-  data_raw$IdTree, 
-  data_raw$IdStem, 
-  sep = "_")
+  data_raw$Plot,
+  data_raw$Subplot,
+  data_raw$IdTree,
+  data_raw$IdStem,
+  sep = "_"
+)
 ```
 
 ## No NA values in DBH
@@ -210,7 +211,7 @@ data_cor <- rbind(data_cor, dupl)
 data_cor <- rbind(data_cor, slice_sample(dupl, n = 3)) # some duplicated twice
 dupl_sev_census <- data_cor %>%
   filter(IdStem == dupl$IdStem[2]) %>%
-  slice_sample(, n = 2) # one IDstem with several duplicated censuses 
+  slice_sample(, n = 2) # one IDstem with several duplicated censuses
 data_cor <- rbind(data_cor, dupl_sev_census)
 ```
 
@@ -247,7 +248,7 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
   prev_nb_obs <- dim(data_cor)[1]
   data_cor <- data_cor %>% distinct() # remove fully duplicated rows
   # if there were some fully duplicated rows:
-  if (prev_nb_obs - dim(data_cor)[1] != 0) {  
+  if (prev_nb_obs - dim(data_cor)[1] != 0) {
     text <- paste(
       prev_nb_obs - dim(data_cor)[1],
       "rows are true duplicates (fully identical rows).",
@@ -302,11 +303,12 @@ if (still_stem_dupli == TRUE) {
 ```{r warn_still_duplicate}
 if (still_stem_dupli == TRUE) {
   text <- paste(
-    "IMPORTANT: Please check these cases in your raw data before starting the", 
-    "process again. For now, we have only kept the first measurement of these", 
-    "duplicate stems, but please let us know how we can better deal with these", 
-    "duplicate measurements.") 
-  data_cor <- data_cor |> 
+    "IMPORTANT: Please check these cases in your raw data before starting the",
+    "process again. For now, we have only kept the first measurement of these",
+    "duplicate stems, but please let us know how we can better deal with these",
+    "duplicate measurements."
+  )
+  data_cor <- data_cor |>
     subset(!duplicated(paste(IdStem, Year)))
 } else {
   text <- ""
@@ -835,9 +837,9 @@ data_aggr <- data_cor |>
 ```{r}
 # add subplotarea information when missing
 if (!("SubplotArea" %in% colnames(data_cor))) {
-  data_cor <- data_cor |> 
-    group_by(Plot) |> 
-    mutate(SubplotArea = unique(PlotArea) / length(unique(Subplot))) |> 
+  data_cor <- data_cor |>
+    group_by(Plot) |>
+    mutate(SubplotArea = unique(PlotArea) / length(unique(Subplot))) |>
     ungroup()
 }
 ```
@@ -845,36 +847,43 @@ if (!("SubplotArea" %in% colnames(data_cor))) {
 # Diversity metrics
 
 ```{r}
-
 # Calculate diversity indices per plot and year
 
-  # Count species occurrences/abundance by plot and year
-  species_count <- data_cor %>%
-    group_by(Plot, Year, ScientificName) %>%
-    summarise(count = n(), .groups = "drop")
+# Count species occurrences/abundance by plot and year
+species_count <- data_cor %>%
+  group_by(Plot, Year, ScientificName) %>%
+  summarise(count = n(), .groups = "drop")
 
-  # Calculate neutral diversity indices per plot and year
-  neutral_div <- species_count %>%
-    group_by(Plot, Year) %>%
-    summarise(
-      species_richness = n_distinct(ScientificName),
-      shannon_entropy = as.numeric(Shannon(count)),
-      simpson_index = 1 - as.numeric(Simpson(count)),
-      evenness = as.numeric(Shannon(count)) / log(n_distinct(ScientificName)))
-  
-  # Change data to long format to plot all indices together    
-  results_long <- neutral_div %>%
-    pivot_longer(cols = c(species_richness, shannon_entropy, simpson_index, evenness), names_to = "index", values_to = "value")
+# Calculate neutral diversity indices per plot and year
+neutral_div <- species_count %>%
+  group_by(Plot, Year) %>%
+  summarise(
+    species_richness = n_distinct(ScientificName),
+    shannon_entropy = as.numeric(Shannon(count)),
+    simpson_index = 1 - as.numeric(Simpson(count)),
+    evenness = as.numeric(Shannon(count)) / log(n_distinct(ScientificName))
+  )
 
-  # Plot temporal trajectories of different indices across plots
-  div_plot <- ggplot(results_long, aes(x = Year, y = value, color = as.factor(Plot))) + 
-    geom_line() +
-    facet_wrap(~index, scales = "free_y") +
-    labs(title = "Diversity Indices Across Plots and Years", x = "Year", y = "Index Value", color = "Plot" ) +
-    theme_minimal()
-  
-print(div_plot)  
-  
+# Change data to long format to plot all indices together
+results_long <- neutral_div %>%
+  pivot_longer(
+    cols = c(species_richness, shannon_entropy, simpson_index, evenness),
+    names_to = "index",
+    values_to = "value"
+  )
+
+# Plot temporal trajectories of different indices across plots
+div_plot <-
+  ggplot(results_long, aes(x = Year, y = value, color = as.factor(Plot))) +
+  geom_line() +
+  facet_wrap(~index, scales = "free_y") +
+  labs(
+    title = "Diversity Indices Across Plots and Years",
+    x = "Year", y = "Index Value", color = "Plot"
+  ) +
+  theme_minimal()
+
+print(div_plot)
 ```
 
 # Basal area 
@@ -888,7 +897,7 @@ data_cor <-
   data_cor |>
   ungroup() |>
   separate_wider_delim(ScientificName_cor, " ",
-    names = c("Genus_cor", "Species_cor"), 
+    names = c("Genus_cor", "Species_cor"),
     too_many = "drop", too_few = "align_start"
   )
 
@@ -906,8 +915,8 @@ We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground bi
 # e_var <- computeE(c(11, 0)) #nolint
 e_var <- 0
 agb_func <- function(d, wd) {
-  return(exp(-2.023977 - 0.89563505 * e_var + 0.92023559 *
-               log(wd) + 2.79495823 * log(d) - 0.04606298 * (log(d)^2)) / 1000)
+  return(exp(-2.023977 - 0.89563505 * e_var + 0.92023559 * log(wd) +
+               2.79495823 * log(d) - 0.04606298 * (log(d)^2)) / 1000)
 }
 data_cor <- data_cor |>
   mutate(
