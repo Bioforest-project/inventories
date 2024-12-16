@@ -832,7 +832,7 @@ data_cor |>
 ```{r}
 data_aggr <- data_cor |>
   ungroup() |>
-  select(Site, Plot, Subplot, Year) |>
+  select(Site, Plot, Year) |>
   unique()
 ```
 
@@ -840,7 +840,7 @@ data_aggr <- data_cor |>
 # add subplotarea information when missing
 if (!("SubplotArea" %in% colnames(data_cor))) {
   data_cor <- data_cor |>
-    group_by(Plot) |>
+    group_by(Site, Plot) |>
     mutate(SubplotArea = unique(PlotArea) / length(unique(Subplot))) |>
     ungroup()
 }
@@ -853,12 +853,12 @@ if (!("SubplotArea" %in% colnames(data_cor))) {
 
 # Count species occurrences/abundance by plot and year
 species_count <- data_cor %>%
-  group_by(Plot, Year, ScientificName) %>%
+  group_by(Site, Plot, Year, ScientificName) %>%
   summarise(count = n(), .groups = "drop")
 
 # Calculate neutral diversity indices per plot and year
 neutral_div <- species_count %>%
-  group_by(Plot, Year) %>%
+  group_by(Site, Plot, Year) %>%
   summarise(
     species_richness = n_distinct(ScientificName),
     shannon_entropy = as.numeric(Shannon(count)),
@@ -909,7 +909,7 @@ data_cor <-
 data_cor$wd <- with(data_cor, getWoodDensity(
   genus = Genus_cor,
   species = Species_cor,
-  stand = paste(Plot, Subplot, Year)
+  stand = paste(Site, Plot, Year)
 )$meanWD)
 ```
 We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground biomass. 
@@ -937,9 +937,9 @@ data_cor <- data_cor |>
 ```{r}
 data_aggr <-
   data_cor |>
-  group_by(Plot, Subplot, Year) |>
+  group_by(Site, Plot, Year) |>
   summarise(
-    agb = sum(agb / SubplotArea)
+    agb = sum(agb / PlotArea)
   ) |>
   merge(data_aggr, all.y = TRUE)
 ```
@@ -948,7 +948,7 @@ data_aggr <-
 data_aggr |>
   ggplot(aes(
     x = Year, y = agb, color = factor(Plot),
-    group = paste(Plot, Subplot)
+    group = paste(Plot)
   )) +
   geom_point() +
   geom_line() +
@@ -961,8 +961,8 @@ data_aggr |>
 ```{r}
 # for each census year, add information on previous and next census years
 data_year <- data_aggr |>
-  select(Plot, Subplot, Year) |>
-  group_by(Plot, Subplot) |>
+  select(Site, Plot, Year) |>
+  group_by(Site, Plot) |>
   mutate(
     prev_census = c(NA, Year[-length(Year)]),
     next_census = c(Year[-1], NA)
@@ -979,16 +979,16 @@ data_cor <- data_cor |>
 data_aggr <- data_cor |>
   # agb recruitment per tree
   mutate(recr = ifelse(Year == recr_year, agb / (Year - prev_census), 0)) |>
-  group_by(Plot, Subplot, Year) |>
+  group_by(Site, Plot, Year) |>
   summarise(
-    agb_recr = sum(recr / SubplotArea)
+    agb_recr = sum(recr / PlotArea)
   ) |>
   merge(data_aggr, all.y = TRUE)
 
 data_aggr |>
   ggplot(aes(
     x = Year, y = agb_recr, color = factor(Plot),
-    group = paste(Plot, Subplot)
+    group = paste(Site, Plot)
   )) +
   geom_point() +
   geom_line() +
@@ -999,14 +999,14 @@ data_aggr |>
 ```{r growth}
 data_aggr <- data_cor |>
   mutate(agb_gr_yr = agb_growth / (Year - prev_census)) |>
-  group_by(Plot, Subplot, Year) |>
-  summarise(agb_growth = sum(agb_gr_yr / SubplotArea, na.rm = TRUE)) |>
+  group_by(Site, Plot, Year) |>
+  summarise(agb_growth = sum(agb_gr_yr / PlotArea, na.rm = TRUE)) |>
   merge(data_aggr, all.y = TRUE)
 
 data_aggr |>
   ggplot(aes(
     x = Year, y = agb_growth, color = factor(Plot),
-    group = paste(Plot, Subplot)
+    group = paste(Site, Plot)
   )) +
   geom_point() +
   geom_line() +
@@ -1018,10 +1018,10 @@ data_aggr |>
 ```{r mort}
 data_aggr <- data_cor |>
   subset(Year == mort_year) |>
-  group_by(Plot, Subplot, Year, next_census) |>
-  summarise(agb_mort = sum(agb / (next_census - Year) / SubplotArea)) |>
+  group_by(Site, Plot, Year, next_census) |>
+  summarise(agb_mort = sum(agb / (next_census - Year) / PlotArea)) |>
   mutate(Year = next_census) |>
-  select(Plot, Subplot, Year, agb_mort) |>
+  select(Site, Plot, Year, agb_mort) |>
   merge(data_aggr, all.y = TRUE)
 
 data_aggr |>
