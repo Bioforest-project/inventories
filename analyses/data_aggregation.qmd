@@ -83,11 +83,11 @@ data_raw <- data_raw |>
   merge(plot_information, by.x = c("Site", "Plot"), by.y = c("site", "plot"))
 ```
 
-The following plots do not have information on either their coordinates or their treatment and have been removed from the analysis: `r paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")`. Please add their information to the online document or check that the site and plot names are consistent between your harmonized data and the online document.   
+The following plots do not have information on either their coordinates or their treatment and have been removed from the analysis: `r paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")`. Please add their information to the [online document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link) or check that the site and plot names are consistent between your harmonized data and the online document.   
 
 # General presentation of the data
 
-This document presents the data aggregation for the `r paste(unique(data_raw$Site), collapse = ", ")` site(s). This site had `r length(unique(data_raw$Plot))` plots: `r unique(data_raw$Plot)`.
+This document presents the data aggregation for the `r paste(unique(data_raw$Site), collapse = ", ")` site(s). The site(s) have `r length(unique(data_raw$Plot))` plots: `r unique(data_raw$Plot)`.
 
 It has `r dim(data_raw)[1]` observations, belonging to `r length(unique(data_raw$IdStem))` stems.
 
@@ -96,7 +96,7 @@ The following table shows the number of censuses per plots.
 ```{r censusNb}
 data_raw %>%
   group_by(Site, Plot) %>%
-  summarise(census_number = length(unique(IdCensus))) %>%
+  summarise(number_of_censuses = length(unique(IdCensus))) %>%
   knitr::kable()
 ```
 
@@ -108,7 +108,7 @@ Censuses were conducted between `r min(data_raw$Year)` and `r max(data_raw$Year)
 
 This step checks for the absence of "anomalies" in the data.
 
-## Creat unique IdStem
+## Create a unique stem identifier across sites and plots
 
 We paste the name of the site, plot, subplot and tag/ID of the tree and stem to create a new unique identifier for each stem.
 
@@ -117,7 +117,7 @@ data_raw <- data_raw |>
   mutate(IdStem = paste(Site, Plot, Subplot, IdTree, IdStem, sep = "_"))
 ```
 
-## No NA values in DBH
+## Remove NA values in DBH
 
 ```{r Na_DBH}
 if (anyNA(data_raw$Diameter)) {
@@ -164,15 +164,24 @@ if (length(unique(data_raw$MinDBH)) == 1) {
     "cm for the whole data set."
   )
 } else {
-  # count the number of cutoff per plot and census
+  # count the number of cutoff > 10 cm per plot and census
   cutoff_plot_cens <- data_raw %>%
-    group_by(Plot, IdCensus) %>%
-    summarise(cutoff = length(unique(MinDBH)))
-  if (length(unique(cutoff_plot_cens$cutoff)) != 1) {
-    text <- "There is more than one DBH cutoff per plot and per census.
-    This is a problem, please check the data."
+    group_by(Site, Plot) %>%
+    summarise(n_cutoff_sup_10 = length(unique(MinDBH[MinDBH > 10])))
+  if (all(cutoff_plot_cens$n_cutoff_sup_10 == 0)) {
+    text <- paste(
+      "All DBH cutoffs are at 10 cm or below;",
+      "we will only use stems > 10 cm DBH."
+    )
   } else {
-    text <- "There are several DBH cutoff, as follow:"
+    data_above_10 <- cutoff_plot_cens |>
+      subset(n_cutoff_sup_10 > 0) |>
+      mutate(idplot = paste(Site, Plot, sep = "-"))
+    text <- paste(
+      "The following plots have one or more DBH cutoffs",
+      "above 10 cm DBH:",
+      paste(data_above_10$idplot, collapse = ", ")
+    )
   }
 }
 ```
@@ -183,40 +192,53 @@ if (length(unique(data_raw$MinDBH)) == 1) {
 #| message: false
 #| warning: false
 if (length(unique(data_raw$MinDBH)) != 1) {
-  if (length(unique(cutoff_plot_cens$cutoff)) == 1) {
-    data_raw %>%
-      group_by(Plot, IdCensus) %>%
-      summarise(dbhcut = unique(MinDBH)) %>%
-      pivot_wider(names_from = Plot, values_from = dbhcut) %>%
-      knitr::kable()
-  }
+  data_raw %>%
+    group_by(Site, Plot, IdCensus) %>%
+    summarise(dbhcut = unique(MinDBH)) %>%
+    # pivot_wider(names_from = Plot, values_from = dbhcut) %>%
+    knitr::kable()
 }
 ```
 
 ## All trees above the DBH cutoff
 
+We first remove all measures with either DBH = 0 cm or NA values. 
+
+```{r}
+data_raw <- data_raw |>
+  subset(Diameter > 0 & !is.na(Diameter))
+```
+
+
 ```{r abovecutoff}
-below_cut <- data_raw %>%
-  filter(Diameter < MinDBH) %>%
-  select(MinDBH, IdCensus, Plot, Diameter)
-if (dim(below_cut)[1] == 0) {
-  text <- "There are no stems with a DBH below the DBH cutoff."
-  data_cor <- data_raw
+data_cor <- data_raw %>% filter(Diameter >= MinDBH & Diameter >= 10)
+
+if (with(data_raw, !any(Diameter < MinDBH | Diameter < 10))) {
+  text <- "There are no stems with a DBH below the DBH cutoff or below 10 cm."
 } else {
-  below_cut <- below_cut %>%
-    mutate(DBHDiff = MinDBH - Diameter)
-  data_cor <- data_raw %>% filter(Diameter >= MinDBH)
+  n_below_cut <- with(data_raw, sum(Diameter < MinDBH & !is.na(Diameter)))
+  n_below_10 <- with(data_raw, sum(Diameter < 10 & !is.na(Diameter)))
+
   text <- paste("There are ",
-    dim(below_cut)[1],
-    " observations of stems with a DBH below the DBH cutoff (",
-    round(dim(below_cut)[1] * 100 / dim(data_raw)[1], 1),
-    "%). For these observations, the difference between
-                the DBH and the cutoff ranges between ",
-    round(min(below_cut$DBHDiff), 2), " cm and ",
-    round(max(below_cut$DBHDiff), 2),
-    " cm, with a median value of ",
-    round(median(below_cut$DBHDiff), 2), "cm.
-                These observations are removed, leaving a dataset of ",
+    n_below_cut,
+    " observations of stems with a DBH below their DBH cutoff (",
+    round(n_below_cut * 100 / dim(data_raw)[1], 2),
+    "%), with a difference ranging ",
+    subset(data_raw, Diameter < MinDBH) |>
+      with(MinDBH - Diameter) |>
+      range() |>
+      round(3) |>
+      paste(collapse = "-"),
+    " cm between the observation and the cutoff, and a median difference of ",
+    subset(data_raw, Diameter < MinDBH) |>
+      with(MinDBH - Diameter) |>
+      median() |>
+      round(2),
+    " cm. There were ",
+    n_below_10,
+    " observations with a DBH below 10 cm (",
+    round(n_below_10 * 100 / dim(data_raw)[1], 1),
+    "%). These observations are removed, leaving a dataset of ",
     dim(data_cor)[1],
     " observations.",
     sep = ""
@@ -327,7 +349,9 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 
 ```{r which_still_dupli}
 if (still_stem_dupli == TRUE) {
-  stem_dupli_bis %>% knitr::kable()
+  stem_dupli_bis %>%
+    select(IdStem, IdCensus) %>%
+    knitr::kable()
 }
 ```
 
@@ -340,7 +364,7 @@ if (still_stem_dupli == TRUE) {
     "duplicate measurements."
   )
   data_cor <- data_cor |>
-    subset(!duplicated(paste(IdStem, Year)))
+    subset(!duplicated(paste(IdStem, IdCensus)))
 } else {
   text <- ""
 }
@@ -351,18 +375,22 @@ if (still_stem_dupli == TRUE) {
 ## Are there multi-stemmed trees?
 
 ```{r nbstemID}
-if (length(unique(data_cor$IdStem)) == length(unique(data_cor$IdTree))) {
-  text <- "The number of stem identifiers and the number of tree identifiers are equal, suggesting either that there are no multi-stemmed trees, or that the multiple stems are considered as different individuals." # nolint
+data_nstem <- data_cor |>
+  group_by(Site, Plot, Subplot, IdTree) |>
+  summarise(nstem = length(unique(IdStem)))
+if (all(data_nstem$nstem == 1)) {
+  print(paste(
+    "The number of stem identifiers and the number of tree identifiers are",
+    "equal, suggesting either that there are no multi-stemmed trees, or",
+    "that the multiple stems are considered as different individuals."
+  ))
 } else {
-  if (length(unique(data_cor$IdStem)) > length(unique(data_cor$IdTree))) {
-    text <- "There are more stem identifiers than tree identifiers, suggesting that there are some multi-stemmed trees." # nolint
-  } else {
-    text <- "There are less stem identifiers than tree identifiers, which suggest a problem of duplicated stem identifiers." # nolint
-  }
+  print("The following trees have multiple stems:")
+  data_nstem |>
+    subset(nstem > 1) |>
+    knitr::kable()
 }
 ```
-
-`r text`
 
 ## No NA is scientific name ?
 
@@ -415,11 +443,11 @@ This step adds two columns to the dataset:
 
 -   "no_cor" when there was no problem,
 
--   "gapfilled" observations with NA in the ScientificName, but for which other observations of the same trees have a unique ScientificName. These case were gapfilled but putting the scientific name of the other observations in ScientificName_cor
+-   "gapfilled" observations with NA in the ScientificName, but for which other observations of the same trees have a unique ScientificName. These cases were gapfilled by putting the scientific name of the other observations in ScientificName_cor
 
 -   "more than one scientific name" for observations of individuals with at least 2 different (non NA) scientific names. As we cannot know which is correct, all observations of the given individuals are set to NA.
 
-> To discuss : it would be worth it gapfilling the scientific name when some obs are indet. as well, But I don't know if the Inded are always coded the same, and how...
+> To discuss : it would be worth gapfilling the scientific name when some obs are indet. as well, But I don't know if the Inded are always coded the same, and how...
 
 ```{r dummy_Sp_dupl}
 #| eval: false
@@ -559,10 +587,11 @@ data_cor <- data_cor %>%
 
 ```{r textSPdupl}
 if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
-  text <- "There was always only one scientific name for a given individual
-  (or always a NA). No change has been made.
-  The value is ScientificName_cor is the same than in ScientificName,
-  and SpName_codecor is always 'no_cor'"
+  text <- paste(
+    "There was always only one scientific name for a given individual (or",
+    "always a NA). No change has been made. The value is ScientificName_cor",
+    "is the same than in ScientificName, and SpName_codecor is always 'no_cor'"
+  )
 } else { # if some correction have been made
   nb_filled <- data_cor %>%
     filter(SpName_codecor == "gapfilled") %>%
@@ -649,7 +678,14 @@ if (any(colnames(data_cor) == "HOM")) {
     "The height of measurement information is available so we could apply the",
     "taper correction from Cushman et al., 2014."
   )
-  data_cor$diameter_cor <- taper(data_cor$diameter_cor, data_cor$HOM)
+  # harmonize HOM values
+  data_cor <- data_cor |>
+    mutate(HOM = as.numeric(HOM)) |>
+    # some values in cm: convert to m
+    mutate(HOM = ifelse(HOM >= 50, HOM / 100, HOM)) |>
+    # apply correction
+    mutate(diameter_cor = taper(diameter_cor, HOM))
+
   subset(data_cor, HOM != 1.3) |>
     ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
     geom_abline(intercept = 0, slope = 1, lty = 2) +
@@ -659,7 +695,7 @@ if (any(colnames(data_cor) == "HOM")) {
     theme_classic()
 } else {
   text <- paste(
-    "There is no information on height of measurement information,",
+    "There is no information on height of measurement,",
     "so we could not apply any taper correction."
   )
 }
@@ -688,19 +724,20 @@ col_tree <-
     "census|year|month|day|date|status|code|diam|hom|pom|circ|dbh",
     tolower(colnames(data_cor))
   )
+col_pattern <- "Census|Year|Month|Day|Date|Status|Code|Diam|HOM|POM|Circ|DBH"
 
 missing_censuses <- data_cor |>
   # list all census years by plot and subplot
-  group_by(Plot, Subplot) |>
+  group_by(Site, Plot, Subplot) |>
   reframe(Year = unique(Year)) |>
   ungroup() |>
   # add all combinations of IdStem x IdCensus (by Plot and Subplot)
   merge(
-    unique(data_cor[, c("Plot", "Subplot", "IdStem")]),
-    by = c("Plot", "Subplot")
+    unique(data_cor[, c("Site", "Plot", "Subplot", "IdStem")]),
+    by = c("Site", "Plot", "Subplot")
   ) |>
   # add tree-level information
-  merge(unique(data_cor[, col_tree])) |>
+  merge(unique(data_cor[, ..col_tree])) |>
   # add DBH information
   merge(
     data_cor[, c("IdStem", "Year", "diameter_cor")],
