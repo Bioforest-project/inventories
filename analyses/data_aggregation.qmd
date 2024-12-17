@@ -18,34 +18,24 @@ library(tidyverse)
 library(entropart)
 ```
 
-<!-- TO DO
-* check why the chucks are displayed despite the echo: false instruction.
--->
-
 # Introduction
 
 This document is made to be used by data contributors of the Bioforest project, which is an initiative of the TmFO network. By running this quarto document, you will be able to visualize various aspects of your data, and generate an aggregated data set as output. This aggregated data set (depending on the variables available) will be used for analysis by various working groups in the Bioforest project.
 
 Before you run this quarto script, please make sure that you complete the following checklist, and ensure the your dataset is named and structured correctly to be able to run this script.
 
-Checklist:
+You should have already:
 
--   what is raw data? - uncorrected data
+-   signed the data agreement;
 
-<!-- -->
+-   harmonized your **raw** dataset using the [DataHarmonization app](https://github.com/Alliance-for-Tropical-Forest-Science/DataHarmonization); the harmonized dataset should be placed in the same folder as this file;
 
--   sign the data agreement
+-   sent us your species list;
 
--   harmonize your dataset
-
--   send species list (should already be ok)
-
--   add plot-level information in this [document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link)
-
-<!-- Load the data -->
+-   added plot-level information to this [document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link).
 
 ```{r load data}
-single_site <- TRUE
+single_site <- FALSE
 if (single_site) {
   data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")
   # data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv") # nolint
@@ -57,10 +47,47 @@ if (single_site) {
 }
 ```
 
+```{r add-plot-level-data}
+# download from google drive
+googledrive::drive_get(as_id("1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ")) |>
+  googledrive::drive_download(
+    path = "data/raw_data/bioforest-plot-information",
+    type = "csv", overwrite = TRUE
+  )
+plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv")
+
+# harmonize treatment information as logging and silvicultural treatments (T/F)
+control_string <- "unlogged|to be logged|old-growth|control|natural"
+silv_string <- "treatment|devital|thinning"
+plot_information <- plot_information |>
+  mutate(
+    Treatment = ifelse(Treatment != "", Treatment, NA),
+    logging = !grepl(control_string, tolower(Treatment)),
+    silv_treat = grepl(silv_string, tolower(Treatment))
+  ) |>
+  ## remove plots that don't have coordinates and treatment information
+  subset(!is.na(longitude) & !is.na(Treatment)) |>
+  select(site, plot, longitude, latitude, logging, silv_treat)
+
+# plots that are not on the online document
+data_missing <- data_raw |>
+  mutate(site = Site, plot = Plot) |>
+  select(site, plot, PlotArea) |>
+  unique() |>
+  merge(plot_information, all = TRUE) |>
+  subset(is.na(longitude) | is.na(PlotArea)) |>
+  mutate(idplot = paste(site, plot, sep = "-"))
+
+# add plot-level information to the table
+data_raw <- data_raw |>
+  merge(plot_information, by.x = c("Site", "Plot"), by.y = c("site", "plot"))
+```
+
+The following plots do not have information on either their coordinates or their treatment and have been removed from the analysis: `r paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")`. Please add their information to the online document or check that the site and plot names are consistent between your harmonized data and the online document.   
 
 # General presentation of the data
 
-This document presents the data aggregation for the `r unique(data_raw$Site)`. This site had `r length(unique(data_raw$Plot))` plots: `r unique(data_raw$Plot)`.
+This document presents the data aggregation for the `r paste(unique(data_raw$Site), collapse = ", ")` site(s). This site had `r length(unique(data_raw$Plot))` plots: `r unique(data_raw$Plot)`.
 
 It has `r dim(data_raw)[1]` observations, belonging to `r length(unique(data_raw$IdStem))` stems.
 
@@ -76,7 +103,6 @@ data_raw %>%
 Censuses were conducted between `r min(data_raw$Year)` and `r max(data_raw$Year)`.
 
 *Please add a comment on question XXXX of the survey, if there are missing plots or censuses.*
-
 
 # Check data consistency
 
@@ -379,30 +405,21 @@ if (anyNA(data_cor$ScientificName)) {
 }
 ```
 
-## Only one scientific name per tree 
+## Only one scientific name per tree
 
 This step adds two columns to the dataset:
 
-- ScientificName_cor : corrected scientific name, see SpName_codecor 
-to know how it was filled. 
+-   ScientificName_cor : corrected scientific name, see SpName_codecor to know how it was filled.
 
-- SpName_codecor : the type of correction that has been done: 
-- "no_cor" when there was no problem, 
-- "gapfilled" observations with NA in the ScientificName, 
-but for which other observations of the same trees 
-have a unique ScientificName.
-These case were gapfilled but putting the scientific name
-of the other observations in ScientificName_cor
-- "more than one scientific name" for observations of individuals with 
-at least 2 different (non NA) scientific names. 
-As we cannot know which is correct, 
-all observations of the given individuals are set to NA. 
+-   SpName_codecor : the type of correction that has been done:
 
-> To discuss : it would be worth it gapfilling the scientific name 
-when some obs are indet. as well,
-But I don't know if the Inded are always coded the same, and how...
+-   "no_cor" when there was no problem,
 
+-   "gapfilled" observations with NA in the ScientificName, but for which other observations of the same trees have a unique ScientificName. These case were gapfilled but putting the scientific name of the other observations in ScientificName_cor
 
+-   "more than one scientific name" for observations of individuals with at least 2 different (non NA) scientific names. As we cannot know which is correct, all observations of the given individuals are set to NA.
+
+> To discuss : it would be worth it gapfilling the scientific name when some obs are indet. as well, But I don't know if the Inded are always coded the same, and how...
 
 ```{r dummy_Sp_dupl}
 #| eval: false
@@ -457,7 +474,6 @@ data_cor <- data_cor %>%
   ))
 # data_cor %>% filter(ScientificName %in% c("Bla blabbla", "Bli blibbli", "Blu blubblu", "Blo blobblo")) %>%  select(IdTree) # nolint
 ```
-
 
 ```{r one_sp_per_tree}
 nb_sp_tree <- data_cor %>%
@@ -541,8 +557,6 @@ data_cor <- data_cor %>%
   ))
 ```
 
-
-
 ```{r textSPdupl}
 if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
   text <- "There was always only one scientific name for a given individual
@@ -590,7 +604,6 @@ if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
 
 `r text`
 
-
 ## Only one set of coordinates per tree and no missing coordinates
 
 <!-- Which coordinates do we take ? check if there are dataset with no absolute coordinate-->
@@ -611,7 +624,7 @@ if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
 
 ![Flowchart of DBH corrections](flowchart_dbh_correction.png)
 
-We keep the original `Diameter` column and add a `diameter_cor` column where we implement diameter corrections. 
+We keep the original `Diameter` column and add a `diameter_cor` column where we implement diameter corrections.
 
 ```{r}
 data_cor$diameter_cor <- data_cor$Diameter
@@ -619,13 +632,9 @@ data_cor$diameter_cor <- data_cor$Diameter
 
 ## Taper correction
 
-The taper correction estimates DBH for diameter values measured above breast height. We used the function from function from Cushman et al. (2014): 
-$$ DBH = D \cdot e^{b(HOM - 1.3)}$$
-where $DBH$ is the estimated diameter at breast height, $D$ is the measured diameter (cm) at height of measurement $HOM$ (m) and $b$ is defined as follows:
+The taper correction estimates DBH for diameter values measured above breast height. We used the function from function from Cushman et al. (2014): $$ DBH = D \cdot e^{b(HOM - 1.3)}$$ where $DBH$ is the estimated diameter at breast height, $D$ is the measured diameter (cm) at height of measurement $HOM$ (m) and $b$ is defined as follows:
 
-$$b = e^{-2.0205 - 0.5053 ln(diam) + 0.3748 ln(HOM)}$$
-Note: We did not use the equation from Cushman et al. (2020) because, although it includes additional data from a larger number of sites, the equation can give negative values of $b$, resulting in values of $DBH$ less than $D$. One solution in the future is to recalibrate the function using the original data from Cushman et al. (2020). 
-
+$$b = e^{-2.0205 - 0.5053 ln(diam) + 0.3748 ln(HOM)}$$ Note: We did not use the equation from Cushman et al. (2020) because, although it includes additional data from a larger number of sites, the equation can give negative values of $b$, resulting in values of $DBH$ less than $D$. One solution in the future is to recalibrate the function using the original data from Cushman et al. (2020).
 
 ```{r}
 taper <- function(diam, hom) {
@@ -660,9 +669,9 @@ if (any(colnames(data_cor) == "HOM")) {
 
 ## Interpolating missing measurements
 
-If trees are missed in a census and remeasured in a later census, we use the DBH values from the previous and next census to interpolate the missing DBH value(s). 
+If trees are missed in a census and remeasured in a later census, we use the DBH values from the previous and next census to interpolate the missing DBH value(s).
 
-This may lead to bias in the first and last censuses, where missed DBHs cannot be detected. We need to check that recruitment and mortality rates are not systematically lower in these two censuses. 
+This may lead to bias in the first and last censuses, where missed DBHs cannot be detected. We need to check that recruitment and mortality rates are not systematically lower in these two censuses.
 
 ```{r}
 interpolate <- function(diam, years) {
@@ -751,7 +760,7 @@ data_cor <- data_cor |>
 
 > proposal: use general threshold for lower bound, and moving 99th (or 95th) percentile for upper bound
 
-DBH thresholds are defined by size class: trees DBH are split into 20 quantiles. The 99th DBH growth value per quantile is defined as the upper limit above with DBH growth values are considered outliers. The lower DBH growht limit is defined as the 1st percentile of DBH growth for all trees. 
+DBH thresholds are defined by size class: trees DBH are split into 20 quantiles. The 99th DBH growth value per quantile is defined as the upper limit above with DBH growth values are considered outliers. The lower DBH growht limit is defined as the 1st percentile of DBH growth for all trees.
 
 ```{r}
 data_cor <- data_cor |>
@@ -787,7 +796,7 @@ data_cor |>
   theme_classic()
 ```
 
-This graph shows all outlier DBH growth values (in cm/yr), as well as the lower and upper bounds of "acceptable" DBH growth (in red) and the average DBH growth with which outlier values are replaced (blue), as a function of tree DBH.  
+This graph shows all outlier DBH growth values (in cm/yr), as well as the lower and upper bounds of "acceptable" DBH growth (in red) and the average DBH growth with which outlier values are replaced (blue), as a function of tree DBH.
 
 ### Shift DBH series
 
@@ -804,11 +813,11 @@ data_cor <- data_cor |>
 
 ### Substitute excessive DBH changes
 
-Outliers in DBH growth (but not DBHs) are replaced by the mean DBH growth of the corresponding size class (after excluding outlier values). 
+Outliers in DBH growth (but not DBHs) are replaced by the mean DBH growth of the corresponding size class (after excluding outlier values).
 
 > Replacement by average DBH growth values is not optimal; it may introduce bias depending on the variable being estimated. For example, for AGB productivity it would be better to use average AGB.
 
-`r with(data_cor, sum(diam_growth_cor != diam_growth & !is.na(diam_growth_cor)))` outlier DBH growth values were substituted. The following graph shows a subset of trees where the most DBH growth values were substituted. 
+`r with(data_cor, sum(diam_growth_cor != diam_growth & !is.na(diam_growth_cor)))` outlier DBH growth values were substituted. The following graph shows a subset of trees where the most DBH growth values were substituted.
 
 ```{r}
 id_cor <- subset(data_cor, outlier)$IdStem
@@ -896,11 +905,11 @@ div_plot <-
 print(div_plot)
 ```
 
-## Basal area 
+## Basal area
 
 ## Aboveground biomass
 
-> For now use wood density from BIOMASS package; will be changed later to use the consolidated species list. 
+> For now use wood density from BIOMASS package; will be changed later to use the consolidated species list.
 
 ```{r}
 data_cor <-
@@ -917,7 +926,8 @@ data_cor$wd <- with(data_cor, getWoodDensity(
   stand = paste(Site, Plot, Year)
 )$meanWD)
 ```
-We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground biomass. 
+
+We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground biomass.
 
 > need to add plot coordinates; temporarily use random coordinates
 
@@ -937,7 +947,6 @@ data_cor <- data_cor |>
 ```
 
 ### AGB stocks
-
 
 ```{r}
 data_aggr <-
@@ -1018,7 +1027,6 @@ data_aggr |>
   labs(y = "Aboveground biomass growth (t/ha/yr)", col = "Plot") +
   theme_classic()
 ```
-
 
 ```{r mort}
 data_aggr <- data_cor |>
