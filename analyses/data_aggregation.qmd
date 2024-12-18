@@ -43,17 +43,22 @@ if (single_site) {
   data_raw <-
     list.files("data/raw_data/", pattern = "harmonized", full.names = TRUE) |>
     lapply(read.csv) |>
-    rbindlist(fill = TRUE)
+    rbindlist(fill = TRUE, use.names = TRUE) |>
+    as_tibble()
 }
 ```
 
 ```{r add-plot-level-data}
 # download from google drive
-googledrive::drive_get(as_id("1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ")) |>
-  googledrive::drive_download(
-    path = "data/raw_data/bioforest-plot-information",
-    type = "csv", overwrite = TRUE
-  )
+if (!file.exists("data/raw_data/bioforest-plot-information.csv")) {
+  googledrive::drive_get(
+    as_id("1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ")
+  ) |>
+    googledrive::drive_download(
+      path = "data/raw_data/bioforest-plot-information",
+      type = "csv", overwrite = TRUE
+    )
+}
 plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv")
 
 # harmonize treatment information as logging and silvicultural treatments (T/F)
@@ -737,7 +742,7 @@ missing_censuses <- data_cor |>
     by = c("Site", "Plot", "Subplot")
   ) |>
   # add tree-level information
-  merge(unique(data_cor[, ..col_tree])) |>
+  merge(unique(data_cor[, col_tree])) |>
   # add DBH information
   merge(
     data_cor[, c("IdStem", "Year", "diameter_cor")],
@@ -1077,7 +1082,7 @@ data_aggr <- data_cor |>
 data_aggr |>
   ggplot(aes(
     x = Year, y = agb_mort, color = factor(Plot),
-    group = paste(Plot, Subplot)
+    group = paste(Site, Plot)
   )) +
   geom_point() +
   geom_line() +
