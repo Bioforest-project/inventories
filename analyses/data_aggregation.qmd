@@ -1000,16 +1000,16 @@ data_aggr <-
   merge(data_aggr, all.y = TRUE)
 ```
 
+> TODO: solve issue with stem duplication (at some point of the code, maybe missing measurement interpolation, some sites have a high number of stem duplicates)
+
 ```{r}
 data_aggr |>
-  ggplot(aes(
-    x = Year, y = agb, color = factor(Plot),
-    group = paste(Plot)
-  )) +
+  ggplot(aes(x = Year, y = agb, group = factor(Plot))) +
   geom_point() +
   geom_line() +
   labs(y = "Aboveground biomass (t/ha)", col = "Plot") +
-  theme_classic()
+  theme_classic() +
+  facet_wrap(~Site, scales = "free")
 ```
 
 ### AGB fluxes
@@ -1042,14 +1042,12 @@ data_aggr <- data_cor |>
   merge(data_aggr, all.y = TRUE)
 
 data_aggr |>
-  ggplot(aes(
-    x = Year, y = agb_recr, color = factor(Plot),
-    group = paste(Site, Plot)
-  )) +
+  ggplot(aes(x = Year, y = agb_recr, color = factor(Plot))) +
   geom_point() +
   geom_line() +
   labs(y = "Aboveground biomass recruitment (t/ha/yr)", col = "Plot") +
-  theme_classic()
+  theme_classic() +
+  facet_wrap(~Site)
 ```
 
 ```{r growth}
@@ -1067,7 +1065,8 @@ data_aggr |>
   geom_point() +
   geom_line() +
   labs(y = "Aboveground biomass growth (t/ha/yr)", col = "Plot") +
-  theme_classic()
+  theme_classic() +
+  facet_wrap(~Site)
 ```
 
 ```{r mort}
@@ -1087,5 +1086,16 @@ data_aggr |>
   geom_point() +
   geom_line() +
   labs(y = "Aboveground biomass mortality (t/ha/yr)", col = "Plot") +
-  theme_classic()
+  theme_classic() +
+  facet_wrap(~Site)
 ```
+
+
+```{r save-aggregated-data} 
+write.csv(data_aggr, paste0(
+  "data/derived_data/aggregated_data_",
+  paste(unique(data_aggr$Site), collapse = "_"),
+  ".csv"
+))
+```
+
