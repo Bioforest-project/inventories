@@ -892,9 +892,8 @@ data_species <-
   subset(site %in% unique(data_cor$Site))
 
 data_cor <- data_cor |>
-  mutate(
-    genus_raw = tstrsplit(ScientificName, " ")[[1]],
-    species_raw = tstrsplit(ScientificName, " ")[[2]]
+  separate(ScientificName, c("genus_raw", "species_raw"),
+    extra = "drop", fill = "right"
   )
 
 data_cor <- data_cor |>
@@ -908,11 +907,15 @@ data_cor <- data_cor |>
 ## Add functional traits
 
 ```{r}
-data_cor <- data_cor |>
-  merge(
-    read.delim("data/derived_data/traits_v2.tsv"),
-    by = "scientific_cleaned", all.x = TRUE
+data_trait <- read.delim("data/derived_data/traits_v2.tsv") |>
+  pivot_wider(
+    id_cols = "scientific_cleaned",
+    names_from = trait,
+    values_from = trait_value_imputed
   )
+
+data_cor <- data_cor |>
+  merge(data_trait, by = "scientific_cleaned", all.x = TRUE)
 ```
 
 
@@ -923,16 +926,6 @@ data_aggr <- data_cor |>
   ungroup() |>
   select(Site, Plot, Year) |>
   unique()
-```
-
-```{r}
-# add subplotarea information when missing
-if (!("SubplotArea" %in% colnames(data_cor))) {
-  data_cor <- data_cor |>
-    group_by(Site, Plot) |>
-    mutate(SubplotArea = unique(PlotArea) / length(unique(Subplot))) |>
-    ungroup()
-}
 ```
 
 ## Diversity metrics
