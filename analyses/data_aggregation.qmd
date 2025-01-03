@@ -64,7 +64,7 @@ plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
 ```
 
 
-```{r}
+```{r add-e-var}
 # add E variable for AGB allometry (from Chave et al 2014)
 plot_information <- plot_information |>
   mutate(e = computeE(cbind(longitude, latitude)))
@@ -184,6 +184,21 @@ if (anyNA(data_raw$Diameter)) {
 }
 ```
 
+We first remove all measures with either DBH = 0 cm or NA values. 
+
+```{r}
+data_cor <- data_raw |>
+  subset(Diameter > 0 & !is.na(Diameter))
+```
+
+## Remove dead trees 
+
+```{r remove-dead}
+data_cor <- data_cor |>
+  subset(!(Site == "Misiones" & DeadStatusOriginal == 1))
+```
+
+
 ## DBH cutoff
 
 ```{r DBHcutoff}
@@ -234,16 +249,9 @@ if (length(unique(data_raw$MinDBH)) != 1) {
 
 ## All trees above the DBH cutoff
 
-We first remove all measures with either DBH = 0 cm or NA values. 
-
-```{r}
-data_raw <- data_raw |>
-  subset(Diameter > 0 & !is.na(Diameter))
-```
-
 
 ```{r abovecutoff}
-data_cor <- data_raw %>% filter(Diameter >= MinDBH & Diameter >= 10)
+data_cor <- data_cor %>% filter(Diameter >= MinDBH & Diameter >= 10)
 
 if (with(data_raw, !any(Diameter < MinDBH | Diameter < 10))) {
   text <- "There are no stems with a DBH below the DBH cutoff or below 10 cm."
@@ -708,8 +716,8 @@ taper <- function(diam, hom) {
 if (any(colnames(data_cor) == "HOM")) {
   if (any(data_cor$HOM != 1.3)) {
     text <- paste(
-      "The height of measurement information is available so we could apply the",
-      "taper correction from Cushman et al., 2014."
+      "The height of measurement information is available so we could apply",
+      "the taper correction from Cushman et al., 2014."
     )
     # harmonize HOM values
     data_cor <- data_cor |>
@@ -765,6 +773,12 @@ col_tree <-
   )
 col_pattern <- "Census|Year|Month|Day|Date|Status|Code|Diam|HOM|POM|Circ|DBH"
 
+tree_info <- data_cor |>
+  select(c("Year", colnames(data_cor)[col_tree])) |>
+  group_by(Site, Plot, IdStem) |>
+  filter(Year == max(Year)) |>
+  select(-Year)
+
 missing_censuses <- data_cor |>
   # list all census years by plot and subplot
   group_by(Site, Plot, Subplot) |>
@@ -776,7 +790,7 @@ missing_censuses <- data_cor |>
     by = c("Site", "Plot", "Subplot")
   ) |>
   # add tree-level information
-  merge(unique(data_cor[, col_tree])) |>
+  merge(tree_info) |>
   # add DBH information
   merge(
     data_cor[, c("IdStem", "Year", "diameter_cor")],
@@ -788,13 +802,15 @@ missing_censuses <- data_cor |>
   mutate(
     diameter_cor = interpolate(diameter_cor, Year)
   ) |>
-  subset(!is.na(diameter_cor))
+  subset(!is.na(diameter_cor)) |>
+  # keep only measurements missing from original data:
+  subset(!paste(Site, IdStem, Year) %in%
+           paste(data_cor$Site, data_cor$IdStem, data_cor$Year))
 
 # add interpolated DBHs to raw data
-data_cor <- merge(
+data_cor <- bind_rows(
   data_cor,
-  missing_censuses,
-  all.y = TRUE
+  missing_censuses
 )
 rm(missing_censuses)
 
@@ -906,15 +922,17 @@ tree_subs <-
   ) |>
   arrange(desc(nsubs))
 
-data_cor |>
-  subset(IdStem %in% tree_subs$IdStem[1:6]) |>
-  pivot_longer(cols = c("diam_growth", "diameter_cor")) |>
-  ggplot(aes(x = Year)) +
-  geom_point(aes(y = value, col = outlier)) +
-  labs(col = "Outlier DBH growth?") +
-  scale_color_manual(values = c("black", "red")) +
-  facet_grid(name ~ IdStem, scales = "free") +
-  theme_classic()
+if (length(id_cor) > 0) {
+  data_cor |>
+    subset(IdStem %in% tree_subs$IdStem[1:6]) |>
+    pivot_longer(cols = c("diam_growth", "diameter_cor")) |>
+    ggplot(aes(x = Year)) +
+    geom_point(aes(y = value, col = outlier)) +
+    labs(col = "Outlier DBH growth?") +
+    scale_color_manual(values = c("black", "red")) +
+    facet_grid(name ~ IdStem, scales = "free") +
+    theme_bw()
+}
 ```
 # Add clean species information
 
