@@ -935,17 +935,18 @@ data_aggr <- data_cor |>
 
 # Count species occurrences/abundance by plot and year
 species_count <- data_cor %>%
-  group_by(Site, Plot, Year, ScientificName) %>%
+  subset(!is.na(scientific_cleaned)) %>%
+  group_by(Site, Plot, Year, scientific_cleaned) %>%
   summarise(count = n(), .groups = "drop")
 
 # Calculate neutral diversity indices per plot and year
 neutral_div <- species_count %>%
   group_by(Site, Plot, Year) %>%
   summarise(
-    species_richness = n_distinct(ScientificName),
+    species_richness = n_distinct(scientific_cleaned),
     shannon_entropy = as.numeric(Shannon(count)),
     simpson_index = 1 - as.numeric(Simpson(count)),
-    evenness = as.numeric(Shannon(count)) / log(n_distinct(ScientificName))
+    evenness = as.numeric(Shannon(count)) / log(n_distinct(scientific_cleaned))
   )
 
 # Add to main dataframe with aggregatd data
@@ -961,7 +962,10 @@ results_long <- neutral_div %>%
 
 # Plot temporal trajectories of different indices across plots
 div_plot <-
-  ggplot(results_long, aes(x = Year, y = value, color = as.factor(Plot))) +
+  ggplot(
+    results_long,
+    aes(x = Year, y = value, group = as.factor(Plot))
+  ) +
   geom_line() +
   facet_wrap(~index, scales = "free_y") +
   labs(
@@ -979,7 +983,14 @@ print(div_plot)
 
 We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground biomass.
 
-> need to add plot coordinates; temporarily use random coordinates
+```{r}
+p_na_wd <- round(sum(is.na(data_cor$WD)) / nrow(data_cor) * 100, 1)
+data_cor <- data_cor |>
+  group_by(Site, Plot, Year) |>
+  mutate(WD = ifelse(is.na(WD), mean(WD, na.rm = TRUE), WD))
+```
+
+We used imputed specific wood density values; for individuals that were not identified to the species (`r p_na_wd`%), we use an average wood density value per plot and census year. 
 
 ```{r}
 # e_var <- computeE(c(11, 0)) #nolint
@@ -990,7 +1001,7 @@ agb_func <- function(d, wd) {
 }
 data_cor <- data_cor |>
   mutate(
-    agb = agb_func(diameter_cor, wd),
+    agb = agb_func(diameter_cor, WD),
     agb_growth = agb_func(diameter_cor - diam_growth + diam_growth_cor, wd) -
       agb_func(diameter_cor - diam_growth, wd)
   )
