@@ -83,7 +83,7 @@ plot_information <- plot_information |>
   ) |>
   ## remove plots that don't have coordinates and treatment information
   subset(!is.na(longitude) & !is.na(Treatment)) |>
-  select(site, plot, longitude, latitude, logging, silv_treat)
+  select(site, plot, longitude, latitude, logging, silv_treat, e)
 ```
 
 ```{r}
@@ -1026,9 +1026,9 @@ agb_func <- function(d, wd, e_var) {
 }
 data_cor <- data_cor |>
   mutate(
-    agb = agb_func(diameter_cor, WD),
-    agb_growth = agb_func(diameter_cor - diam_growth + diam_growth_cor, wd) -
-      agb_func(diameter_cor - diam_growth, wd)
+    agb = agb_func(diameter_cor, WD, e),
+    agb_growth = agb_func(diameter_cor - diam_growth + diam_growth_cor, WD, e) -
+      agb_func(diameter_cor - diam_growth, WD, e)
   )
 ```
 
@@ -1048,7 +1048,7 @@ data_aggr <-
 
 ```{r}
 data_aggr |>
-  ggplot(aes(x = Year, y = agb, group = factor(Plot))) +
+  ggplot(aes(x = Year, y = agb, col = factor(Plot))) +
   geom_point() +
   geom_line() +
   labs(y = "Aboveground biomass (t/ha)", col = "Plot") +
