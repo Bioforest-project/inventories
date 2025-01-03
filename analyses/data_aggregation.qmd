@@ -59,8 +59,19 @@ if (!file.exists("data/raw_data/bioforest-plot-information.csv")) {
       type = "csv", overwrite = TRUE
     )
 }
-plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv")
+plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
+  subset(site %in% unique(data_raw$Site))
+```
 
+
+```{r}
+# add E variable for AGB allometry (from Chave et al 2014)
+plot_information <- plot_information |>
+  mutate(e = computeE(cbind(longitude, latitude)))
+```
+
+
+```{r}
 # harmonize treatment information as logging and silvicultural treatments (T/F)
 control_string <- "unlogged|to be logged|old-growth|control|natural"
 silv_string <- "treatment|devital|thinning"
@@ -73,7 +84,9 @@ plot_information <- plot_information |>
   ## remove plots that don't have coordinates and treatment information
   subset(!is.na(longitude) & !is.na(Treatment)) |>
   select(site, plot, longitude, latitude, logging, silv_treat)
+```
 
+```{r}
 # plots that are not on the online document
 data_missing <- data_raw |>
   mutate(site = Site, plot = Plot) |>
@@ -86,9 +99,23 @@ data_missing <- data_raw |>
 # add plot-level information to the table
 data_raw <- data_raw |>
   merge(plot_information, by.x = c("Site", "Plot"), by.y = c("site", "plot"))
+
+missing <- paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")
+
+text <- ifelse(
+  nchar(missing) > 0,
+  paste0(
+    "The following plots do not have information on either their",
+    "coordinates or their treatment and have been removed from the",
+    "analysis: ", missing, "."
+  ),
+  "All plots have information on their coordinates and treatment."
+)
 ```
 
-The following plots do not have information on either their coordinates or their treatment and have been removed from the analysis: `r paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")`. Please add their information to the [online document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link) or check that the site and plot names are consistent between your harmonized data and the online document.   
+`r text`
+
+If needed, you can add any missing information to the [online document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link) or check that the site and plot names are consistent between your harmonized data and the online document.
 
 # General presentation of the data
 
@@ -993,9 +1020,7 @@ data_cor <- data_cor |>
 We used imputed specific wood density values; for individuals that were not identified to the species (`r p_na_wd`%), we use an average wood density value per plot and census year. 
 
 ```{r}
-# e_var <- computeE(c(11, 0)) #nolint
-e_var <- 0
-agb_func <- function(d, wd) {
+agb_func <- function(d, wd, e_var) {
   return(exp(-2.023977 - 0.89563505 * e_var + 0.92023559 * log(wd) +
     2.79495823 * log(d) - 0.04606298 * (log(d)^2)) / 1000) # nolint
 }
