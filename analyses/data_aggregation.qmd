@@ -35,9 +35,9 @@ You should have already:
 -   added plot-level information to this [document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link).
 
 ```{r load data}
-single_site <- FALSE
+single_site <- TRUE
 if (single_site) {
-  data_raw <- read.csv("data/raw_data/harmonized_data_bafog_v1.csv")
+  data_raw <- read.csv("data/raw_data/harmonized_data_misiones_v1.csv")
   # data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv") # nolint
 } else {
   data_raw <-
@@ -882,6 +882,39 @@ data_cor |>
   facet_grid(name ~ IdStem, scales = "free") +
   theme_classic()
 ```
+# Add clean species information
+
+## Add clean taxonomy
+
+```{r}
+data_species <-
+  read.delim("data/derived_data/taxonomy_v2.tsv") |>
+  subset(site %in% unique(data_cor$Site))
+
+data_cor <- data_cor |>
+  mutate(
+    genus_raw = tstrsplit(ScientificName, " ")[[1]],
+    species_raw = tstrsplit(ScientificName, " ")[[2]]
+  )
+
+data_cor <- data_cor |>
+  merge(data_species,
+    by.x = c("Site", "genus_raw", "species_raw"),
+    by.y = c("site", "genus_raw", "species_raw"),
+    all.x = TRUE
+  )
+```
+
+## Add functional traits
+
+```{r}
+data_cor <- data_cor |>
+  merge(
+    read.delim("data/derived_data/traits_v2.tsv"),
+    by = "scientific_cleaned", all.x = TRUE
+  )
+```
+
 
 # Data aggregation
 
@@ -950,24 +983,6 @@ print(div_plot)
 ## Basal area
 
 ## Aboveground biomass
-
-> For now use wood density from BIOMASS package; will be changed later to use the consolidated species list.
-
-```{r}
-data_cor <-
-  data_cor |>
-  ungroup() |>
-  separate_wider_delim(ScientificName_cor, " ",
-    names = c("Genus_cor", "Species_cor"),
-    too_many = "drop", too_few = "align_start"
-  )
-
-data_cor$wd <- with(data_cor, getWoodDensity(
-  genus = Genus_cor,
-  species = Species_cor,
-  stand = paste(Site, Plot, Year)
-)$meanWD)
-```
 
 We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground biomass.
 
