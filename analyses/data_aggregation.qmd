@@ -37,7 +37,7 @@ You should have already:
 ```{r load data}
 single_site <- TRUE
 if (single_site) {
-  data_raw <- read.csv("data/raw_data/harmonized_data_misiones_v1.csv")
+  data_raw <- read.csv("data/raw_data/harmonized_data_mbaiki_v1.csv")
   # data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv") # nolint
 } else {
   data_raw <-
@@ -67,7 +67,12 @@ plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
 ```{r add-e-var}
 # add E variable for AGB allometry (from Chave et al 2014)
 plot_information <- plot_information |>
-  mutate(e = computeE(cbind(longitude, latitude)))
+  # temporary: some plots in MBaiki have the switched coordinates
+  mutate(
+    latitude_cor = ifelse(site == "Mbaiki" & latitude > 4, longitude, latitude),
+    longitude_cor = ifelse(site == "Mbaiki" & latitude > 4, latitude, longitude)
+  ) |>
+  mutate(e = computeE(cbind(longitude_cor, latitude_cor)))
 ```
 
 
@@ -97,7 +102,7 @@ data_missing <- data_raw |>
   mutate(idplot = paste(site, plot, sep = "-"))
 
 # add plot-level information to the table
-data_raw <- data_raw |>
+data_cor <- data_raw |>
   merge(plot_information, by.x = c("Site", "Plot"), by.y = c("site", "plot"))
 
 missing <- paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")
@@ -119,20 +124,20 @@ If needed, you can add any missing information to the [online document](https://
 
 # General presentation of the data
 
-This document presents the data aggregation for the `r paste(unique(data_raw$Site), collapse = ", ")` site(s). The site(s) have `r length(unique(data_raw$Plot))` plots: `r unique(data_raw$Plot)`.
+This document presents the data aggregation for the `r paste(unique(data_cor$Site), collapse = ", ")` site(s). The site(s) have `r length(unique(data_cor$Plot))` plots: `r unique(data_cor$Plot)`.
 
-It has `r dim(data_raw)[1]` observations, belonging to `r length(unique(data_raw$IdStem))` stems.
+It has `r dim(data_cor)[1]` observations, belonging to `r length(unique(data_cor$IdStem))` stems.
 
 The following table shows the number of censuses per plots.
 
 ```{r censusNb}
-data_raw %>%
+data_cor %>%
   group_by(Site, Plot) %>%
   summarise(number_of_censuses = length(unique(IdCensus))) %>%
   knitr::kable()
 ```
 
-Censuses were conducted between `r min(data_raw$Year)` and `r max(data_raw$Year)`.
+Censuses were conducted between `r min(data_cor$Year)` and `r max(data_cor$Year)`.
 
 *Please add a comment on question XXXX of the survey, if there are missing plots or censuses.*
 
@@ -140,155 +145,17 @@ Censuses were conducted between `r min(data_raw$Year)` and `r max(data_raw$Year)
 
 This step checks for the absence of "anomalies" in the data.
 
-## Create a unique stem identifier across sites and plots
+## Unique stem identifier across sites and plots
 
 We paste the name of the site, plot, subplot and tag/ID of the tree and stem to create a new unique identifier for each stem.
 
-```{r}
-data_raw <- data_raw |>
+```{r complete-idstem}
+data_cor <- data_cor |>
   mutate(IdStem = paste(Site, Plot, Subplot, IdTree, IdStem, sep = "_"))
 ```
 
-## Remove NA values in DBH
+We then check that there are no duplicated measurements for the same stem ID in a given census. 
 
-```{r Na_DBH}
-if (anyNA(data_raw$Diameter)) {
-  nb_na_dbh <- sum(is.na(data_raw$Diameter))
-  perc_na_dbh <- round(
-    sum(is.na(data_raw$Diameter)) * 100 / dim(data_raw)[1],
-    2
-  )
-  text <- paste("There are",
-    nb_na_dbh,
-    "missing diameters in the data, which represent",
-    perc_na_dbh,
-    "% of the observations.",
-    "The missing values are distributed across the plots",
-    "and censuses as follow:.",
-    sep = " "
-  )
-} else {
-  text <- "There are no missing diameter in the data."
-}
-```
-
-`r text`
-
-```{r explo_na_DBH}
-if (anyNA(data_raw$Diameter)) {
-  data_raw %>%
-    filter(is.na(Diameter)) %>%
-    count(Plot, IdCensus) %>%
-    pivot_wider(names_from = Plot, values_from = n) %>%
-    knitr::kable()
-}
-```
-
-We first remove all measures with either DBH = 0 cm or NA values. 
-
-```{r}
-data_cor <- data_raw |>
-  subset(Diameter > 0 & !is.na(Diameter))
-```
-
-## Remove dead trees 
-
-```{r remove-dead}
-data_cor <- data_cor |>
-  subset(!(Site == "Misiones" & DeadStatusOriginal == 1))
-```
-
-
-## DBH cutoff
-
-```{r DBHcutoff}
-#| message: false
-#| warning: false
-if (length(unique(data_raw$MinDBH)) == 1) {
-  text <- paste(
-    "There is a single DBH cutoff set to",
-    unique(data_raw$MinDBH),
-    "cm for the whole data set."
-  )
-} else {
-  # count the number of cutoff > 10 cm per plot and census
-  cutoff_plot_cens <- data_raw %>%
-    group_by(Site, Plot) %>%
-    summarise(n_cutoff_sup_10 = length(unique(MinDBH[MinDBH > 10])))
-  if (all(cutoff_plot_cens$n_cutoff_sup_10 == 0)) {
-    text <- paste(
-      "All DBH cutoffs are at 10 cm or below;",
-      "we will only use stems > 10 cm DBH."
-    )
-  } else {
-    data_above_10 <- cutoff_plot_cens |>
-      subset(n_cutoff_sup_10 > 0) |>
-      mutate(idplot = paste(Site, Plot, sep = "-"))
-    text <- paste(
-      "The following plots have one or more DBH cutoffs",
-      "above 10 cm DBH:",
-      paste(data_above_10$idplot, collapse = ", ")
-    )
-  }
-}
-```
-
-`r text`
-
-```{r display_cutoff}
-#| message: false
-#| warning: false
-if (length(unique(data_raw$MinDBH)) != 1) {
-  data_raw %>%
-    group_by(Site, Plot, IdCensus) %>%
-    summarise(dbhcut = unique(MinDBH)) %>%
-    # pivot_wider(names_from = Plot, values_from = dbhcut) %>%
-    knitr::kable()
-}
-```
-
-## All trees above the DBH cutoff
-
-
-```{r abovecutoff}
-data_cor <- data_cor %>% filter(Diameter >= MinDBH & Diameter >= 10)
-
-if (with(data_raw, !any(Diameter < MinDBH | Diameter < 10))) {
-  text <- "There are no stems with a DBH below the DBH cutoff or below 10 cm."
-} else {
-  n_below_cut <- with(data_raw, sum(Diameter < MinDBH & !is.na(Diameter)))
-  n_below_10 <- with(data_raw, sum(Diameter < 10 & !is.na(Diameter)))
-
-  text <- paste("There are ",
-    n_below_cut,
-    " observations of stems with a DBH below their DBH cutoff (",
-    round(n_below_cut * 100 / dim(data_raw)[1], 2),
-    "%), with a difference ranging ",
-    subset(data_raw, Diameter < MinDBH) |>
-      with(MinDBH - Diameter) |>
-      range() |>
-      round(3) |>
-      paste(collapse = "-"),
-    " cm between the observation and the cutoff, and a median difference of ",
-    subset(data_raw, Diameter < MinDBH) |>
-      with(MinDBH - Diameter) |>
-      median() |>
-      round(2),
-    " cm. There were ",
-    n_below_10,
-    " observations with a DBH below 10 cm (",
-    round(n_below_10 * 100 / dim(data_raw)[1], 1),
-    "%). These observations are removed, leaving a dataset of ",
-    dim(data_cor)[1],
-    " observations.",
-    sep = ""
-  )
-}
-```
-
-`r text`
-
-## No stem ID duplicates
 
 ```{r}
 #| eval: false
@@ -411,6 +278,146 @@ if (still_stem_dupli == TRUE) {
 ```
 
 `r text`
+
+## Remove NA values in DBH
+
+```{r Na_DBH}
+if (anyNA(data_cor$Diameter)) {
+  nb_na_dbh <- sum(is.na(data_cor$Diameter))
+  perc_na_dbh <- round(
+    sum(is.na(data_cor$Diameter)) * 100 / dim(data_cor)[1],
+    2
+  )
+  text <- paste("There are",
+    nb_na_dbh,
+    "missing diameters in the data, which represent",
+    perc_na_dbh,
+    "% of the observations.",
+    "The missing values are distributed across the plots",
+    "and censuses as follow:.",
+    sep = " "
+  )
+} else {
+  text <- "There are no missing diameter in the data."
+}
+```
+
+`r text`
+
+```{r explo_na_DBH}
+if (anyNA(data_cor$Diameter)) {
+  data_cor %>%
+    filter(is.na(Diameter)) %>%
+    count(Plot, IdCensus) %>%
+    pivot_wider(names_from = Plot, values_from = n) %>%
+    knitr::kable()
+}
+```
+
+We first remove all measures with either DBH = 0 cm or NA values. 
+
+```{r}
+data_cor <- data_cor |>
+  subset(Diameter > 0 & !is.na(Diameter))
+```
+
+## Remove dead trees 
+
+```{r remove-dead}
+data_cor <- data_cor |>
+  subset(!(Site == "Misiones" & LifeStatusOriginal == 1)) # to be checked
+```
+
+
+## DBH cutoff
+
+```{r DBHcutoff}
+#| message: false
+#| warning: false
+if (length(unique(data_cor$MinDBH)) == 1) {
+  text <- paste(
+    "There is a single DBH cutoff set to",
+    unique(data_cor$MinDBH),
+    "cm for the whole data set."
+  )
+} else {
+  # count the number of cutoff > 10 cm per plot and census
+  cutoff_plot_cens <- data_cor %>%
+    group_by(Site, Plot) %>%
+    summarise(n_cutoff_sup_10 = length(unique(MinDBH[MinDBH > 10])))
+  if (all(cutoff_plot_cens$n_cutoff_sup_10 == 0)) {
+    text <- paste(
+      "All DBH cutoffs are at 10 cm or below;",
+      "we will only use stems > 10 cm DBH."
+    )
+  } else {
+    data_above_10 <- cutoff_plot_cens |>
+      subset(n_cutoff_sup_10 > 0) |>
+      mutate(idplot = paste(Site, Plot, sep = "-"))
+    text <- paste(
+      "The following plots have one or more DBH cutoffs",
+      "above 10 cm DBH:",
+      paste(data_above_10$idplot, collapse = ", ")
+    )
+  }
+}
+```
+
+`r text`
+
+```{r display_cutoff}
+#| message: false
+#| warning: false
+if (length(unique(data_cor$MinDBH)) != 1) {
+  data_cor %>%
+    group_by(Site, Plot, IdCensus) %>%
+    summarise(dbhcut = unique(MinDBH)) %>%
+    # pivot_wider(names_from = Plot, values_from = dbhcut) %>%
+    knitr::kable()
+}
+```
+
+## All trees above the DBH cutoff
+
+
+```{r abovecutoff}
+if (with(data_cor, !any(Diameter < MinDBH | Diameter < 10))) {
+  text <- "There are no stems with a DBH below the DBH cutoff or below 10 cm."
+} else {
+  n_below_cut <- with(data_cor, sum(Diameter < MinDBH & !is.na(Diameter)))
+  n_below_10 <- with(data_cor, sum(Diameter < 10 & !is.na(Diameter)))
+
+  text <- paste("There are ",
+    n_below_cut,
+    " observations of stems with a DBH below their DBH cutoff (",
+    round(n_below_cut * 100 / dim(data_cor)[1], 2),
+    "%), with a difference ranging ",
+    subset(data_cor, Diameter < MinDBH) |>
+      with(MinDBH - Diameter) |>
+      range() |>
+      round(3) |>
+      paste(collapse = "-"),
+    " cm between the observation and the cutoff, and a median difference of ",
+    subset(data_cor, Diameter < MinDBH) |>
+      with(MinDBH - Diameter) |>
+      median() |>
+      round(2),
+    " cm. There were ",
+    n_below_10,
+    " observations with a DBH below 10 cm (",
+    round(n_below_10 * 100 / dim(data_cor)[1], 1),
+    "%). These observations are removed, leaving a dataset of ",
+    dim(data_cor)[1],
+    " observations.",
+    sep = ""
+  )
+}
+
+data_cor <- data_cor %>% filter(Diameter >= MinDBH & Diameter >= 10)
+```
+
+`r text`
+
 
 ## Are there multi-stemmed trees?
 
@@ -804,8 +811,7 @@ missing_censuses <- data_cor |>
   ) |>
   subset(!is.na(diameter_cor)) |>
   # keep only measurements missing from original data:
-  subset(!paste(Site, IdStem, Year) %in%
-           paste(data_cor$Site, data_cor$IdStem, data_cor$Year))
+  subset(!paste(IdStem, Year) %in% with(data_cor, paste(IdStem, Year)))
 
 # add interpolated DBHs to raw data
 data_cor <- bind_rows(
@@ -934,6 +940,7 @@ if (length(id_cor) > 0) {
     theme_bw()
 }
 ```
+
 # Add clean species information
 
 ## Add clean taxonomy
@@ -941,17 +948,16 @@ if (length(id_cor) > 0) {
 ```{r}
 data_species <-
   read.delim("data/derived_data/taxonomy_v2.tsv") |>
-  subset(site %in% unique(data_cor$Site))
+  subset(site %in% unique(data_cor$Site)) |>
+  select(contains("cleaned") | contains("genus") | contains("species")) |>
+  unique()
 
 data_cor <- data_cor |>
   separate(ScientificName, c("genus_raw", "species_raw"),
-    extra = "drop", fill = "right"
-  )
-
-data_cor <- data_cor |>
+    extra = "drop", fill = "right", remove = FALSE
+  ) |>
   merge(data_species,
-    by.x = c("Site", "genus_raw", "species_raw"),
-    by.y = c("site", "genus_raw", "species_raw"),
+    by = c("genus_raw", "species_raw"),
     all.x = TRUE
   )
 ```
@@ -1001,8 +1007,16 @@ neutral_div <- species_count %>%
     evenness = as.numeric(Shannon(count)) / log(n_distinct(scientific_cleaned))
   )
 
+# add information on percentage of undetermined species
+perc_undet <- data_cor %>%
+  group_by(Site, Plot, Year) %>%
+  summarise(p_undet = sum(is.na(scientific_cleaned)) / n())
+
+
 # Add to main dataframe with aggregatd data
-data_aggr <- merge(data_aggr, neutral_div)
+data_aggr <- data_aggr %>%
+  merge(neutral_div) %>%
+  merge(perc_undet)
 
 # Change data to long format to plot all indices together
 results_long <- neutral_div %>%
@@ -1028,6 +1042,8 @@ div_plot <-
 
 print(div_plot)
 ```
+
+## Stem abundance 
 
 ## Basal area
 
