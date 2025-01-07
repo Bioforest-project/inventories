@@ -37,8 +37,13 @@ You should have already:
 ```{r load data}
 single_site <- TRUE
 if (single_site) {
-  data_raw <- read.csv("data/raw_data/harmonized_data_mbaiki_v1.csv")
+  data_raw <- read.csv("data/raw_data/harmonized_data_paracou_t2_v1.csv")
   # data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv") # nolint
+  data_raw <-
+    list.files("data/raw_data/", "paracou", full.names = TRUE) |>
+    lapply(read.csv) |>
+    rbindlist(fill = TRUE, use.names = TRUE) |>
+    as_tibble()
 } else {
   data_raw <-
     list.files("data/raw_data/", pattern = "harmonized", full.names = TRUE) |>
@@ -1007,16 +1012,9 @@ neutral_div <- species_count %>%
     evenness = as.numeric(Shannon(count)) / log(n_distinct(scientific_cleaned))
   )
 
-# add information on percentage of undetermined species
-perc_undet <- data_cor %>%
-  group_by(Site, Plot, Year) %>%
-  summarise(p_undet = sum(is.na(scientific_cleaned)) / n())
-
-
 # Add to main dataframe with aggregatd data
 data_aggr <- data_aggr %>%
-  merge(neutral_div) %>%
-  merge(perc_undet)
+  merge(neutral_div)
 
 # Change data to long format to plot all indices together
 results_long <- neutral_div %>%
@@ -1030,7 +1028,7 @@ results_long <- neutral_div %>%
 div_plot <-
   ggplot(
     results_long,
-    aes(x = Year, y = value, group = as.factor(Plot))
+    aes(x = Year, y = value, color = as.factor(Plot))
   ) +
   geom_line() +
   facet_wrap(~index, scales = "free_y") +
@@ -1041,6 +1039,23 @@ div_plot <-
   theme_minimal()
 
 print(div_plot)
+```
+
+
+```{r}
+# add information on percentage of undetermined species
+perc_undet <- data_cor %>%
+  group_by(Site, Plot, Year) %>%
+  summarise(p_undet = sum(is.na(scientific_cleaned)) / n())
+
+data_aggr <- data_aggr %>%
+  merge(perc_undet)
+
+data_aggr %>%
+  ggplot(aes(x = Year, y = p_undet * 100, colour = factor(Plot))) +
+  geom_line() +
+  labs(y = "Undetermined stems (%)", colour = "Plot") +
+  theme_minimal()
 ```
 
 ## Stem abundance 
