@@ -37,16 +37,11 @@ You should have already:
 ```{r load data}
 single_site <- TRUE
 if (single_site) {
-  data_raw <- read.csv("data/raw_data/harmonized_data_mbaiki_v1.csv")
+  data_raw <- read.csv("data/raw_data/harmonized_data_moju_v1.csv")
   # data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv") # nolint
-  # data_raw <-  # nolint
-  #   list.files("data/raw_data/", "paracou", full.names = TRUE) |>  # nolint
-  #   lapply(read.csv) |>  # nolint
-  #   rbindlist(fill = TRUE, use.names = TRUE) |>  # nolint
-  #   as_tibble()  # nolint
 } else {
   data_raw <-
-    list.files("data/raw_data/", pattern = "harmonized", full.names = TRUE) |>
+    list.files("data/raw_data/", pattern = "paracou", full.names = TRUE) |>
     lapply(read.csv) |>
     rbindlist(fill = TRUE, use.names = TRUE) |>
     as_tibble()
@@ -56,7 +51,6 @@ if (single_site) {
 ```{r create-data_cor}
 data_cor <- data_raw
 ```
-
 
 ```{r remove-values}
 # some values (partial censuses, etc) need to be removed in some sites
@@ -74,18 +68,19 @@ if (any(data_raw$Site == "Paracou")) {
 }
 ```
 
-`r text` 
+`r text`
 
 ```{r add-plot-level-data}
 # download from google drive
 if (!file.exists("data/raw_data/bioforest-plot-information.csv")) {
   googledrive::drive_get(
-    as_id("1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ")
+    googledrive::as_id("1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ")
   ) |>
     googledrive::drive_download(
       path = "data/raw_data/bioforest-plot-information",
       type = "csv", overwrite = TRUE
     )
+  # TODO solve authentication error
 }
 plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
   subset(site %in% unique(data_raw$Site))
@@ -142,6 +137,13 @@ text <- ifelse(
   ),
   "All plots have information on their coordinates and treatment."
 )
+if (nrow(data_cor) == 0) {
+  stop(paste0(
+    "Please check the information (coordinates and treatment) ",
+    "on the online document: https://docs.google.com/spreadsheets/d/",
+    "1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link"
+  ))
+}
 ```
 
 `r text`
@@ -416,7 +418,6 @@ if (length(unique(data_cor$MinDBH)) != 1) {
 }
 ```
 
-
 ```{r abovecutoff}
 if (with(data_cor, !any(Diameter < MinDBH | Diameter < 10))) {
   text <- "There are no stems with a DBH below the DBH cutoff or below 10 cm."
@@ -460,26 +461,36 @@ data_cor <- data_cor %>% filter(Diameter >= MinDBH & Diameter >= 10)
 ### Remove dead trees
 
 ```{r remove-dead}
-n_dead <- sum(!data_cor$LifeStatus %in% c(TRUE, NA, "Normal", "Recruit"))
-if (n_dead > 0) {
-  text <- paste0(
-    n_dead, " (", round(n_dead / nrow(data_cor) * 100, 2), "%)",
-    " measurements with Diameter > min DBH were considered as dead, and ",
-    "removed from the analysis. Their LifeStatus values were: ",
-    paste(unique(
-      setdiff(data_cor$LifeStatus, c(TRUE, NA, "Normal", "Recruit"))
-    ), collapse = ", "),
-    "."
-  )
+alive <- c(1:4, TRUE, NA, "Normal", "Recruit")
+# embrapa sites : CIF <= 5: live trees
+if ("LifeStatus" %in% colnames(data_cor)) {
+  n_dead <- sum(!data_cor$LifeStatus %in% alive)
+  if (n_dead > 0) {
+    text <- paste0(
+      n_dead, " (", round(n_dead / nrow(data_cor) * 100, 2), "%) measurements",
+      " with Diameter > min DBH were considered as dead, and removed from the ",
+      "analysis. Their LifeStatus values of trees considered dead were: ",
+      paste(unique(
+        setdiff(data_cor$LifeStatus, alive)
+      ), collapse = ", "),
+      "."
+    )
+  } else {
+    text <- paste(
+      "No measurements (with Diameter > min DBH) were",
+      "identified as dead trees in the data."
+    )
+  }
+
+  data_cor <- data_cor |> subset(LifeStatus %in% alive)
+  # TODO: ask for life status codes per site?
 } else {
   text <- paste(
-    "No measurements (with Diameter > min DBH) were",
-    "identified as dead trees in the data."
+    "There was no column 'LifeStatus' with information about life status",
+    "(dead/alive), so we considered all stems to be alive: please let us know",
+    "if we should have used another column."
   )
 }
-
-data_cor <- data_cor |>
-  subset(LifeStatus %in% c(TRUE, NA, "Normal", "Recruit")) # to be checked
 ```
 
 `r text`
@@ -487,6 +498,33 @@ data_cor <- data_cor |>
 ### Remove life forms other than trees (lianas, palms, etc)
 
 ```{r life-form}
+if (!"VernName" %in% colnames(data_cor)) data_cor$VernName <- NA
+if (!"ScientificName" %in% colnames(data_cor)) data_cor$ScientificName <- NA
+
+data_cor <- data_cor |>
+  mutate(
+    VernName = iconv(VernName, "UTF-8", "ASCII//TRANSLIT"),
+    ScientificName = iconv(ScientificName, "UTF-8", "ASCII//TRANSLIT")
+  ) |>
+  separate(VernName,
+    sep = "\\[|\\]", c("vernname_1", "vernname_2"),
+    extra = "drop", fill = "left", remove = FALSE
+  ) |>
+  mutate(
+    ScientificName = ifelse(
+      is.na(ScientificName) | grepl("\\[", ScientificName),
+      vernname_2, ScientificName
+    ),
+    vernname_1 = NULL,
+    vernname_2 = NULL
+  )
+
+# add genus and vername columns if missing
+if (!"Genus" %in% colnames(data_cor)) {
+  data_cor <- data_cor |>
+    separate(ScientificName, "Genus", extra = "drop", remove = FALSE)
+}
+
 data_cor <- data_cor |>
   # subsetting to remove life forms other
   subset(!(LifeForm %in% c("Palm", "Tree fan", "Death", "Vine"))) |>
@@ -495,7 +533,6 @@ data_cor <- data_cor |>
   # Astrocaryum vernacular name in Paracou, only identified to vern name
   subset(is.na(VernName) | VernName != "murumuru")
 ```
-
 
 ## Consistency of stem-level information
 
@@ -745,7 +782,6 @@ if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
 <!-- Which coordinates do we take ? check if there are dataset with no absolute coordinate-->
 
 ### All trees within the plot
-
 
 # First step of data visualization
 
@@ -1015,7 +1051,7 @@ data_species <-
 
 data_cor <- data_cor |>
   separate(ScientificName, c("genus_raw", "species_raw"),
-    extra = "drop", fill = "right", remove = FALSE
+    extra = "drop", fill = "left", remove = FALSE
   ) |>
   merge(data_species,
     by = c("genus_raw", "species_raw"),
@@ -1252,7 +1288,7 @@ data_aggr |>
   ) |>
   write.csv(paste0(
     "data/derived_data/aggregated_data_",
-    paste(tolower(unique(data_aggr$Site)), collapse = "_"),
+    paste(gsub(" ", "_", tolower(unique(data_aggr$Site))), collapse = "_"),
     ".csv"
-  ))
+  ), row.names = FALSE)
 ```
