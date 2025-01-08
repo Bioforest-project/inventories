@@ -37,7 +37,7 @@ You should have already:
 ```{r load data}
 single_site <- TRUE
 if (single_site) {
-  data_raw <- read.csv("data/raw_data/harmonized_data_paracou_t2_v1.csv")
+  data_raw <- read.csv("data/raw_data/harmonized_data_mbaiki_v1.csv")
   # data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv") # nolint
   data_raw <-
     list.files("data/raw_data/", "paracou", full.names = TRUE) |>
@@ -52,6 +52,29 @@ if (single_site) {
     as_tibble()
 }
 ```
+
+```{r create-data_cor}
+data_cor <- data_raw
+```
+
+
+```{r remove-values}
+# some values (partial censuses, etc) need to be removed in some sites
+text <- ""
+if (any(data_raw$Site == "Paracou")) {
+  data_cor <- data_cor |>
+    subset(!(Site == "Paracou" & as.numeric(Plot) == 16)) |>
+    subset(!(Site == "Paracou" & (Year %in% c(1996, 1998, 2000, 2002)))) |>
+    subset(!(Site == "Paracou" & Year == 2010 & Plot == 15))
+  text <- paste(
+    text,
+    "In Paracou, we removed partial census years: 1996, 1998, 2000, and 2002,",
+    "and census year 2010 of plot 15 (25% of the plot was not measured)."
+  )
+}
+```
+
+`r text` 
 
 ```{r add-plot-level-data}
 # download from google drive
@@ -68,7 +91,6 @@ plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
   subset(site %in% unique(data_raw$Site))
 ```
 
-
 ```{r add-e-var}
 # add E variable for AGB allometry (from Chave et al 2014)
 plot_information <- plot_information |>
@@ -79,7 +101,6 @@ plot_information <- plot_information |>
   ) |>
   mutate(e = computeE(cbind(longitude_cor, latitude_cor)))
 ```
-
 
 ```{r}
 # harmonize treatment information as logging and silvicultural treatments (T/F)
@@ -107,7 +128,7 @@ data_missing <- data_raw |>
   mutate(idplot = paste(site, plot, sep = "-"))
 
 # add plot-level information to the table
-data_cor <- data_raw |>
+data_cor <- data_cor |>
   merge(plot_information, by.x = c("Site", "Plot"), by.y = c("site", "plot"))
 
 missing <- paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")
@@ -150,7 +171,7 @@ Censuses were conducted between `r min(data_cor$Year)` and `r max(data_cor$Year)
 
 This step checks for the absence of "anomalies" in the data.
 
-## Unique stem identifier across sites and plots
+## Avoid duplicated measurements
 
 We paste the name of the site, plot, subplot and tag/ID of the tree and stem to create a new unique identifier for each stem.
 
@@ -159,8 +180,7 @@ data_cor <- data_cor |>
   mutate(IdStem = paste(Site, Plot, Subplot, IdTree, IdStem, sep = "_"))
 ```
 
-We then check that there are no duplicated measurements for the same stem ID in a given census. 
-
+We then check that there are no duplicated measurements for the same stem ID in a given census.
 
 ```{r}
 #| eval: false
@@ -284,7 +304,29 @@ if (still_stem_dupli == TRUE) {
 
 `r text`
 
-## Remove NA values in DBH
+### Are there multi-stemmed trees?
+
+```{r nbstemID}
+data_nstem <- data_cor |>
+  group_by(Site, Plot, Subplot, IdTree) |>
+  summarise(nstem = length(unique(IdStem)))
+if (all(data_nstem$nstem == 1)) {
+  print(paste(
+    "The number of stem identifiers and the number of tree identifiers are",
+    "equal, suggesting either that there are no multi-stemmed trees, or",
+    "that the multiple stems are considered as different individuals."
+  ))
+} else {
+  print("The following trees have multiple stems:")
+  data_nstem |>
+    subset(nstem > 1) |>
+    knitr::kable()
+}
+```
+
+## Consistency of diameter measurements
+
+### Remove missing (NA) DBH values
 
 ```{r Na_DBH}
 if (anyNA(data_cor$Diameter)) {
@@ -319,22 +361,14 @@ if (anyNA(data_cor$Diameter)) {
 }
 ```
 
-We first remove all measures with either DBH = 0 cm or NA values. 
+We first remove all measures with either DBH = 0 cm or NA values.
 
 ```{r}
 data_cor <- data_cor |>
   subset(Diameter > 0 & !is.na(Diameter))
 ```
 
-## Remove dead trees 
-
-```{r remove-dead}
-data_cor <- data_cor |>
-  subset(!(Site == "Misiones" & LifeStatusOriginal == 1)) # to be checked
-```
-
-
-## DBH cutoff
+### All trees above the DBH cutoff
 
 ```{r DBHcutoff}
 #| message: false
@@ -382,8 +416,6 @@ if (length(unique(data_cor$MinDBH)) != 1) {
 }
 ```
 
-## All trees above the DBH cutoff
-
 
 ```{r abovecutoff}
 if (with(data_cor, !any(Diameter < MinDBH | Diameter < 10))) {
@@ -423,28 +455,51 @@ data_cor <- data_cor %>% filter(Diameter >= MinDBH & Diameter >= 10)
 
 `r text`
 
+## Remove measurements other than live trees
 
-## Are there multi-stemmed trees?
+### Remove dead trees
 
-```{r nbstemID}
-data_nstem <- data_cor |>
-  group_by(Site, Plot, Subplot, IdTree) |>
-  summarise(nstem = length(unique(IdStem)))
-if (all(data_nstem$nstem == 1)) {
-  print(paste(
-    "The number of stem identifiers and the number of tree identifiers are",
-    "equal, suggesting either that there are no multi-stemmed trees, or",
-    "that the multiple stems are considered as different individuals."
-  ))
+```{r remove-dead}
+n_dead <- sum(!data_cor$LifeStatus %in% c(TRUE, NA, "Normal", "Recruit"))
+if (n_dead > 0) {
+  text <- paste0(
+    n_dead, " (", round(n_dead / nrow(data_cor) * 100, 2), "%)",
+    " measurements with Diameter > min DBH were considered as dead, and ",
+    "removed from the analysis. Their LifeStatus values were: ",
+    paste(unique(
+      setdiff(data_cor$LifeStatus, c(TRUE, NA, "Normal", "Recruit"))
+    ), collapse = ", "),
+    "."
+  )
 } else {
-  print("The following trees have multiple stems:")
-  data_nstem |>
-    subset(nstem > 1) |>
-    knitr::kable()
+  text <- paste(
+    "No measurements (with Diameter > min DBH) were",
+    "identified as dead trees in the data."
+  )
 }
+
+data_cor <- data_cor |>
+  subset(LifeStatus %in% c(TRUE, NA, "Normal", "Recruit")) # to be checked
 ```
 
-## No NA is scientific name ?
+`r text`
+
+### Remove life forms other than trees (lianas, palms, etc)
+
+```{r life-form}
+data_cor <- data_cor |>
+  # subsetting to remove life forms other
+  subset(!(LifeForm %in% c("Palm", "Tree fan", "Death", "Vine"))) |>
+  # remove palm genera or vernacular names
+  subset(!Genus %in% c("Oenocarpus", "Euterpe", "Astrocaryum")) |>
+  # Astrocaryum vernacular name in Paracou, only identified to vern name
+  subset(is.na(VernName) | VernName != "murumuru")
+```
+
+
+## Consistency of stem-level information
+
+### No NA is scientific name ?
 
 ```{r na_sp}
 if (anyNA(data_cor$ScientificName)) {
@@ -485,7 +540,7 @@ if (anyNA(data_cor$ScientificName)) {
 }
 ```
 
-## Only one scientific name per tree
+### Only one scientific name per tree
 
 This step adds two columns to the dataset:
 
@@ -685,11 +740,12 @@ if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
 
 `r text`
 
-## Only one set of coordinates per tree and no missing coordinates
+### Only one set of coordinates per tree and no missing coordinates
 
 <!-- Which coordinates do we take ? check if there are dataset with no absolute coordinate-->
 
-## All trees within the plot
+### All trees within the plot
+
 
 # First step of data visualization
 
@@ -981,7 +1037,6 @@ data_cor <- data_cor |>
   merge(data_trait, by = "scientific_cleaned", all.x = TRUE)
 ```
 
-
 # Data aggregation
 
 ```{r}
@@ -1041,7 +1096,6 @@ div_plot <-
 print(div_plot)
 ```
 
-
 ```{r}
 # add information on percentage of undetermined species
 perc_undet <- data_cor %>%
@@ -1058,7 +1112,7 @@ data_aggr %>%
   theme_minimal()
 ```
 
-## Stem abundance 
+## Stem abundance
 
 ## Basal area
 
@@ -1073,7 +1127,7 @@ data_cor <- data_cor |>
   mutate(WD = ifelse(is.na(WD), mean(WD, na.rm = TRUE), WD))
 ```
 
-We used imputed specific wood density values; for individuals that were not identified to the species (`r p_na_wd`%), we use an average wood density value per plot and census year. 
+We used imputed specific wood density values; for individuals that were not identified to the species (`r p_na_wd`%), we use an average wood density value per plot and census year.
 
 ```{r}
 agb_func <- function(d, wd, e_var) {
@@ -1190,12 +1244,10 @@ data_aggr |>
   facet_wrap(~Site)
 ```
 
-
-```{r save-aggregated-data} 
+```{r save-aggregated-data}
 write.csv(data_aggr, paste0(
   "data/derived_data/aggregated_data_",
   paste(unique(data_aggr$Site), collapse = "_"),
   ".csv"
 ))
 ```
-
