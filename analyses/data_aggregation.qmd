@@ -39,11 +39,11 @@ single_site <- TRUE
 if (single_site) {
   data_raw <- read.csv("data/raw_data/harmonized_data_mbaiki_v1.csv")
   # data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv") # nolint
-  data_raw <-
-    list.files("data/raw_data/", "paracou", full.names = TRUE) |>
-    lapply(read.csv) |>
-    rbindlist(fill = TRUE, use.names = TRUE) |>
-    as_tibble()
+  # data_raw <-  # nolint
+  #   list.files("data/raw_data/", "paracou", full.names = TRUE) |>  # nolint
+  #   lapply(read.csv) |>  # nolint
+  #   rbindlist(fill = TRUE, use.names = TRUE) |>  # nolint
+  #   as_tibble()  # nolint
 } else {
   data_raw <-
     list.files("data/raw_data/", pattern = "harmonized", full.names = TRUE) |>
@@ -1098,14 +1098,14 @@ print(div_plot)
 
 ```{r}
 # add information on percentage of undetermined species
-perc_undet <- data_cor %>%
-  group_by(Site, Plot, Year) %>%
+perc_undet <- data_cor |>
+  group_by(Site, Plot, Year) |>
   summarise(p_undet = sum(is.na(scientific_cleaned)) / n())
 
-data_aggr <- data_aggr %>%
+data_aggr <- data_aggr |>
   merge(perc_undet)
 
-data_aggr %>%
+data_aggr |>
   ggplot(aes(x = Year, y = p_undet * 100, colour = factor(Plot))) +
   geom_line() +
   labs(y = "Undetermined stems (%)", colour = "Plot") +
@@ -1153,8 +1153,6 @@ data_aggr <-
   ) |>
   merge(data_aggr, all.y = TRUE)
 ```
-
-> TODO: solve issue with stem duplication (at some point of the code, maybe missing measurement interpolation, some sites have a high number of stem duplicates)
 
 ```{r}
 data_aggr |>
@@ -1245,9 +1243,16 @@ data_aggr |>
 ```
 
 ```{r save-aggregated-data}
-write.csv(data_aggr, paste0(
-  "data/derived_data/aggregated_data_",
-  paste(unique(data_aggr$Site), collapse = "_"),
-  ".csv"
-))
+data_aggr |>
+  pivot_longer(
+    cols = !Site:Year,
+    names_to = "variable",
+    values_to = "value",
+    values_drop_na = TRUE
+  ) |>
+  write.csv(paste0(
+    "data/derived_data/aggregated_data_",
+    paste(tolower(unique(data_aggr$Site)), collapse = "_"),
+    ".csv"
+  ))
 ```
