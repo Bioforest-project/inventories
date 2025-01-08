@@ -5,6 +5,8 @@ format:
     toc: true
     number-sections: true
     colorlinks: true
+params:
+  site: paracou
 execute:
   echo: false      
 ---
@@ -35,17 +37,16 @@ You should have already:
 -   added plot-level information to this [document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link).
 
 ```{r load data}
-single_site <- TRUE
-if (single_site) {
-  data_raw <- read.csv("data/raw_data/harmonized_data_moju_v1.csv")
-  # data_raw <- read.csv("data/raw_data/harmonized_data_kibale_v1.csv") # nolint
-} else {
-  data_raw <-
-    list.files("data/raw_data/", pattern = "paracou", full.names = TRUE) |>
-    lapply(read.csv) |>
-    rbindlist(fill = TRUE, use.names = TRUE) |>
-    as_tibble()
+# automate compilation for all sites with qmd params
+data_list <- list.files("data/raw_data/", params$site, full.names = TRUE)
+if (length(data_list) == 0) {
+  stop("Please check that the site name in params matches your data file name.")
 }
+data_raw <-
+  data_list |>
+  lapply(read.csv) |>
+  rbindlist(fill = TRUE, use.names = TRUE) |>
+  as_tibble()
 ```
 
 ```{r create-data_cor}
