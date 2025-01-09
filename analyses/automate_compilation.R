@@ -1,3 +1,5 @@
+library(tidyverse)
+
 # automate qmd compilation
 raw_data_sites <- list.files("data/raw_data", "harmonized") |>
   gsub(
@@ -16,30 +18,32 @@ in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
   iconv(to = "ASCII//TRANSLIT") |>
   unique()
 
-automate <- intersect(raw_data, in_plot_info)
+compile_sites <- intersect(raw_data_sites, in_plot_info)
 
 # cache: if we don't want to redo the compilation for files that already exist
 
-cache <- FALSE
+cache <- TRUE
 
 if (cache) {
-  done <- list.files("outputs/data_aggregation_reports/") |>
-    gsub(pattern = "aggregated_data_|.csv", replacement = "")
+  done <- list.files("reports/") |>
+    gsub(pattern = "data_aggregation_|.pdf", replacement = "")
 
-  automate <- setdiff(automate, done)
+  compile_sites <- setdiff(compile_sites, done)
 }
 
-for (s in automate) {
-  # render document
-  quarto::quarto_render(
-    input = "analyses/data_aggregation.qmd",
-    output_format = "all",
-    output_file = paste0("data_aggregation_", s, ".pdf"),
-    execute_params = list(site = s)
-  )
-  # move to "outputs/data_aggregation_reports" folder
-  file.rename(
-    from = paste0("data_aggregation_", s, ".pdf"),
-    to = paste0("outputs/data_aggregation_reports/data_aggregation_", s, ".pdf")
-  )
+if (length(compile_sites) > 0) {
+  for (s in compile_sites) {
+    # render document
+    quarto::quarto_render(
+      input = "analyses/data_aggregation.qmd",
+      output_format = "all",
+      output_file = paste0("data_aggregation_", s, ".pdf"),
+      execute_params = list(site = s)
+    )
+    # move to "outputs/data_aggregation_reports" folder
+    file.rename(
+      from = paste0("data_aggregation_", s, ".pdf"),
+      to = paste0("reports/data_aggregation_", s, ".pdf")
+    )
+  }
 }
