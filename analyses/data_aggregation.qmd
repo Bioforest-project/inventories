@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params:
-  site: paracou
+  site: peteco
 execute:
   echo: false      
 ---
@@ -1077,81 +1077,282 @@ data_cor <- data_cor |>
 # Data aggregation
 
 ```{r}
-data_aggr <- data_cor |>
-  ungroup() |>
+data_aggr <- c()
+```
+
+## Add information for flux calculation 
+
+```{r diff_year}
+#| message: false
+# for each census year, add information on previous and next census years
+data_year <- data_cor |>
   select(Site, Plot, Year) |>
-  unique()
+  unique() |>
+  arrange(Site, Plot, Year) |>
+  group_by(Site, Plot) |>
+  mutate(
+    prev_census = c(NA, Year[-length(Year)]),
+    next_census = c(Year[-1], NA)
+  ) |>
+  ungroup()
+
+# add information on each tree's recruitment and mortality years
+data_cor <- data_cor |>
+  merge(data_year) |>
+  mutate(recr_year = min(Year), mort_year = max(Year), .by = IdStem)
 ```
 
 ## Diversity metrics
+
+### Neutral diversity
 
 ```{r}
 # Calculate diversity indices per plot and year
 
 # Count species occurrences/abundance by plot and year
 species_count <- data_cor %>%
-  subset(!is.na(scientific_cleaned)) %>%
-  group_by(Site, Plot, Year, scientific_cleaned) %>%
+  subset(!is.na(species_corrected)) %>%
+  group_by(Site, Plot, Year,
+    scientific = paste(genus_corrected, species_corrected)
+  ) %>%
   summarise(count = n(), .groups = "drop")
 
 # Calculate neutral diversity indices per plot and year
-neutral_div <- species_count %>%
+neutral_div_sp <- species_count %>%
   group_by(Site, Plot, Year) %>%
   summarise(
-    species_richness = n_distinct(scientific_cleaned),
-    shannon_entropy = as.numeric(Shannon(count)),
-    simpson_index = 1 - as.numeric(Simpson(count)),
-    evenness = as.numeric(Shannon(count)) / log(n_distinct(scientific_cleaned))
+    species_richness_sp = n_distinct(scientific),
+    shannon_entropy_sp = as.numeric(Shannon(count)),
+    simpson_index_sp = 1 - as.numeric(Simpson(count)),
+    evenness_sp = as.numeric(Shannon(count)) / log(n_distinct(scientific))
+  ) %>%
+  pivot_longer(
+    cols = contains("_sp"),
+    names_to = "variable",
+    values_to = "value"
+  )
+
+neutral_div_gen <- data_cor %>%
+  subset(!is.na(genus_corrected)) %>%
+  group_by(Site, Plot, Year, genus = genus_corrected) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(Site, Plot, Year) %>%
+  summarise(
+    species_richness_gen = n_distinct(genus),
+    shannon_entropy_gen = as.numeric(Shannon(count)),
+    simpson_index_gen = 1 - as.numeric(Simpson(count)),
+    evenness_gen = as.numeric(Shannon(count)) / log(n_distinct(genus))
+  ) %>%
+  pivot_longer(
+    cols = contains("_gen"),
+    names_to = "variable",
+    values_to = "value"
   )
 
 # Add to main dataframe with aggregatd data
 data_aggr <- data_aggr %>%
-  merge(neutral_div)
-
-# Change data to long format to plot all indices together
-results_long <- neutral_div %>%
-  pivot_longer(
-    cols = c(species_richness, shannon_entropy, simpson_index, evenness),
-    names_to = "index",
-    values_to = "value"
-  )
+  rbind(neutral_div_sp) %>%
+  rbind(neutral_div_gen)
 
 # Plot temporal trajectories of different indices across plots
-div_plot <-
-  ggplot(
-    results_long,
-    aes(x = Year, y = value, color = as.factor(Plot))
-  ) +
+data_aggr %>%
+  subset(variable %in% neutral_div_sp$variable) %>%
+  ggplot(aes(x = Year, y = value, color = as.factor(Plot))) +
   geom_line() +
-  facet_wrap(~index, scales = "free_y") +
+  facet_wrap(~variable, scales = "free_y") +
   labs(
-    title = "Diversity Indices Across Plots and Years",
+    title = "Diversity Indices Across Plots and Years - Species level",
     x = "Year", y = "Index Value", color = "Plot"
   ) +
   theme_minimal()
 
-print(div_plot)
+data_aggr %>%
+  subset(variable %in% neutral_div_gen$variable) %>%
+  ggplot(aes(x = Year, y = value, color = as.factor(Plot))) +
+  geom_line() +
+  facet_wrap(~variable, scales = "free_y") +
+  labs(
+    title = "Diversity Indices Across Plots and Years - Genus level",
+    x = "Year", y = "Index Value", color = "Plot"
+  ) +
+  theme_minimal()
 ```
+
+### Taxonomic (un)determination
 
 ```{r}
 # add information on percentage of undetermined species
 perc_undet <- data_cor |>
   group_by(Site, Plot, Year) |>
-  summarise(p_undet = sum(is.na(scientific_cleaned)) / n())
+  summarise(
+    p_undet_spp = sum(is.na(species_corrected)) / n(),
+    p_undet_gen = sum(is.na(genus_corrected)) / n(),
+  ) |>
+  pivot_longer(starts_with("p_undet"), names_to = "variable")
 
 data_aggr <- data_aggr |>
-  merge(perc_undet)
+  rbind(perc_undet)
 
 data_aggr |>
-  ggplot(aes(x = Year, y = p_undet * 100, colour = factor(Plot))) +
+  subset(grepl("p_undet", variable)) |>
+  ggplot(aes(x = Year, y = value * 100, colour = factor(Plot))) +
   geom_line() +
   labs(y = "Undetermined stems (%)", colour = "Plot") +
+  facet_wrap(~variable) +
   theme_minimal()
 ```
 
 ## Stem abundance
 
+```{r}
+#| message: false
+data_aggr <-
+  data_cor |>
+  group_by(Site, Plot, Year) |>
+  summarise(
+    nstem = n() / unique(PlotArea)
+  ) |>
+  pivot_longer(nstem, names_to = "variable") |>
+  rbind(data_aggr)
+```
+
+
+
+```{r recruitment}
+#| message: false
+data_aggr <- data_cor |>
+  # agb recruitment per tree
+  mutate(recr = ifelse(Year == recr_year, 1 / (Year - prev_census), 0)) |>
+  group_by(Site, Plot, Year) |>
+  summarise(nstem_recr = sum(recr / PlotArea)) |>
+  pivot_longer(nstem_recr, names_to = "variable") |>
+  rbind(data_aggr)
+```
+
+
+```{r mort}
+#| message: false
+data_aggr <- data_cor |>
+  subset(Year == mort_year) |>
+  group_by(Site, Plot, Year, next_census) |>
+  summarise(nstem_mort = sum(1 / (next_census - Year) / unique(PlotArea))) |>
+  mutate(Year = next_census) |>
+  ungroup() |>
+  select(Site, Plot, Year, nstem_mort) |>
+  pivot_longer(nstem_mort, names_to = "variable") |>
+  rbind(data_aggr)
+```
+
+```{r plot-agb, fig.height=4, fig.width=12}
+#| warning: false
+var_names <- c(
+  "nstem" = "Stem abundance (/ha)",
+  "nstem_recr" = "Stem recruitment rate (/ha/yr)",
+  "nstem_mort" = "Stem mortality rate (/ha/yr)"
+)
+
+data_aggr |>
+  subset(grepl("nstem", variable)) |>
+  ggplot(aes(x = Year, y = value, color = factor(Plot))) +
+  geom_point() +
+  geom_line() +
+  labs(col = "Plot") +
+  theme_minimal() +
+  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+```
+
+<!-- ```{r} -->
+<!-- # TEMP check that diff and diff2 are the same: -->
+<!-- data_aggr |> -->
+<!--   subset(grepl("nstem", variable)) |>  -->
+<!--   pivot_wider(names_from = variable) |>  -->
+<!--   group_by(Site, Plot) |>  -->
+<!--   arrange(Site, Plot, Year) |>  -->
+<!--   mutate(diff = c(NA, (nstem[-1]-nstem[-length(nstem)])/diff(Year))) |>  -->
+<!--   mutate(diff2 = nstem_recr-nstem_mort) |>  -->
+<!--   subset(abs(diff-diff2)>1e-4) -->
+<!-- ``` -->
+
 ## Basal area
+
+```{r}
+ba_func <- function(x) pi * (x / 200)**2
+data_cor <- data_cor |>
+  mutate(
+    ba = ba_func(diameter_cor),
+    ba_growth = ba_func(diameter_cor - diam_growth + diam_growth_cor) -
+      ba_func(diameter_cor - diam_growth)
+  )
+```
+
+```{r ba}
+#| message: false
+data_aggr <-
+  data_cor |>
+  group_by(Site, Plot, Year) |>
+  summarise(
+    ba = sum(ba / PlotArea)
+  ) |>
+  pivot_longer(ba, names_to = "variable") |>
+  rbind(data_aggr)
+```
+
+```{r ba_recr}
+#| message: false
+data_aggr <- data_cor |>
+  # ba recruitment per tree
+  mutate(recr = ifelse(Year == recr_year, ba / (Year - prev_census), 0)) |>
+  group_by(Site, Plot, Year) |>
+  summarise(ba_recr = sum(recr / PlotArea)) |>
+  pivot_longer(ba_recr, names_to = "variable") |>
+  rbind(data_aggr)
+```
+
+```{r ba_growth}
+#| message: false
+data_aggr <- data_cor |>
+  subset(!is.na(ba_growth)) |>
+  mutate(ba_gr_yr = ba_growth / (Year - prev_census)) |>
+  group_by(Site, Plot, Year) |>
+  summarise(ba_growth = sum(ba_gr_yr / PlotArea)) |>
+  pivot_longer(ba_growth, names_to = "variable") |>
+  rbind(data_aggr)
+```
+
+```{r ba_mort}
+#| message: false
+data_aggr <- data_cor |>
+  subset(Year == mort_year) |>
+  group_by(Site, Plot, Year, next_census) |>
+  summarise(ba_mort = sum(ba / (next_census - Year) / PlotArea)) |>
+  mutate(Year = next_census) |>
+  select(Site, Plot, Year, ba_mort) |>
+  pivot_longer(ba_mort, names_to = "variable") |>
+  rbind(data_aggr)
+```
+
+```{r fig.height=8, fig.width=12}
+#| warning: false
+var_names <- c(
+  "ba" = "Basal area (m2/ha)",
+  "ba_recr" = "BA recruitment (m2/ha/yr)",
+  "ba_growth" = "BA growth (m2/ha/yr)",
+  "ba_mort" = "BA mortality (m2/ha/yr)"
+)
+
+data_aggr |>
+  subset(grepl("ba", variable)) |>
+  ggplot(aes(
+    x = Year, y = value, color = factor(Plot),
+    group = paste(Site, Plot)
+  )) +
+  geom_point() +
+  geom_line() +
+  labs(col = "Plot") +
+  theme_minimal() +
+  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+```
+
 
 ## Aboveground biomass
 
@@ -1179,114 +1380,79 @@ data_cor <- data_cor |>
   )
 ```
 
-### AGB stocks
 
-```{r}
+```{r agb}
+#| message: false
 data_aggr <-
   data_cor |>
   group_by(Site, Plot, Year) |>
   summarise(
     agb = sum(agb / PlotArea)
   ) |>
-  merge(data_aggr, all.y = TRUE)
+  pivot_longer(agb, names_to = "variable") |>
+  rbind(data_aggr)
 ```
 
-```{r}
-data_aggr |>
-  ggplot(aes(x = Year, y = agb, col = factor(Plot))) +
-  geom_point() +
-  geom_line() +
-  labs(y = "Aboveground biomass (t/ha)", col = "Plot") +
-  theme_classic() +
-  facet_wrap(~Site, scales = "free")
-```
-
-### AGB fluxes
-
-```{r}
-# for each census year, add information on previous and next census years
-data_year <- data_aggr |>
-  select(Site, Plot, Year) |>
-  group_by(Site, Plot) |>
-  mutate(
-    prev_census = c(NA, Year[-length(Year)]),
-    next_census = c(Year[-1], NA)
-  ) |>
-  ungroup()
-
-# add information on each tree's recruitment and mortality years
-data_cor <- data_cor |>
-  merge(data_year) |>
-  mutate(recr_year = min(Year), mort_year = max(Year), .by = IdStem)
-```
-
-```{r recruitment}
+```{r agb_recr}
+#| message: false
 data_aggr <- data_cor |>
   # agb recruitment per tree
   mutate(recr = ifelse(Year == recr_year, agb / (Year - prev_census), 0)) |>
   group_by(Site, Plot, Year) |>
-  summarise(
-    agb_recr = sum(recr / PlotArea)
-  ) |>
-  merge(data_aggr, all.y = TRUE)
-
-data_aggr |>
-  ggplot(aes(x = Year, y = agb_recr, color = factor(Plot))) +
-  geom_point() +
-  geom_line() +
-  labs(y = "Aboveground biomass recruitment (t/ha/yr)", col = "Plot") +
-  theme_classic() +
-  facet_wrap(~Site)
+  summarise(agb_recr = sum(recr / PlotArea)) |>
+  pivot_longer(agb_recr, names_to = "variable") |>
+  rbind(data_aggr)
 ```
 
-```{r growth}
+```{r agb_growth}
+#| message: false
 data_aggr <- data_cor |>
+  subset(!is.na(agb_growth)) |>
   mutate(agb_gr_yr = agb_growth / (Year - prev_census)) |>
   group_by(Site, Plot, Year) |>
-  summarise(agb_growth = sum(agb_gr_yr / PlotArea, na.rm = TRUE)) |>
-  merge(data_aggr, all.y = TRUE)
-
-data_aggr |>
-  ggplot(aes(
-    x = Year, y = agb_growth, color = factor(Plot),
-    group = paste(Site, Plot)
-  )) +
-  geom_point() +
-  geom_line() +
-  labs(y = "Aboveground biomass growth (t/ha/yr)", col = "Plot") +
-  theme_classic() +
-  facet_wrap(~Site)
+  summarise(agb_growth = sum(agb_gr_yr / PlotArea)) |>
+  pivot_longer(agb_growth, names_to = "variable") |>
+  rbind(data_aggr)
 ```
 
-```{r mort}
+```{r agb_mort}
+#| message: false
 data_aggr <- data_cor |>
   subset(Year == mort_year) |>
   group_by(Site, Plot, Year, next_census) |>
   summarise(agb_mort = sum(agb / (next_census - Year) / PlotArea)) |>
   mutate(Year = next_census) |>
   select(Site, Plot, Year, agb_mort) |>
-  merge(data_aggr, all.y = TRUE)
+  pivot_longer(agb_mort, names_to = "variable") |>
+  rbind(data_aggr)
+```
+
+```{r fig.height=8, fig.width=12}
+#| warning: false
+var_names <- c(
+  "agb" = "AGB (t/ha)",
+  "agb_recr" = "AGB recruitment (t/ha/yr)",
+  "agb_growth" = "AGB growth (t/ha/yr)",
+  "agb_mort" = "AGB mortality (t/ha/yr)"
+)
 
 data_aggr |>
+  subset(grepl("agb", variable)) |>
   ggplot(aes(
-    x = Year, y = agb_mort, color = factor(Plot),
+    x = Year, y = value, color = factor(Plot),
     group = paste(Site, Plot)
   )) +
   geom_point() +
   geom_line() +
-  labs(y = "Aboveground biomass mortality (t/ha/yr)", col = "Plot") +
-  theme_classic() +
-  facet_wrap(~Site)
+  labs(col = "Plot") +
+  theme_minimal() +
+  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
+
+# Save aggregated data
 
 ```{r save-aggregated-data}
 data_aggr |>
-  pivot_longer(
-    cols = !Site:Year,
-    names_to = "variable",
-    values_to = "value",
-    values_drop_na = TRUE
-  ) |>
   write.csv(paste0(
     "data/derived_data/aggregated_data_",
     paste(gsub(" ", "_", tolower(unique(data_aggr$Site))), collapse = "_"),
