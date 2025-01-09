@@ -15,6 +15,7 @@ in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
   tolower() |>
   gsub(pattern = " ", replacement = "_") |>
   gsub(pattern = "_km_|[0-9]", replacement = "") |>
+  gsub(pattern = "sg_", replacement = "sungai_") |>
   iconv(to = "ASCII//TRANSLIT") |>
   unique()
 
