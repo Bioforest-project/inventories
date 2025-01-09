@@ -4,4 +4,5 @@
 !.gitignore
 !data_aggregation.qmd
 !automate_compilation.R
+!quick_data_visualisation.R
 !flowchart_dbh_correction.png
