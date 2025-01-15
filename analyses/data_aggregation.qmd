@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params:
-  site: peteco
+  site: misiones
 execute:
   echo: false      
 ---
@@ -457,6 +457,58 @@ data_cor <- data_cor %>% filter(Diameter >= MinDBH & Diameter >= 10)
 
 `r text`
 
+## Clean species information
+
+```{r}
+# clean columns with taxonomic information (vernacular and scientific)
+if (!"VernName" %in% colnames(data_cor)) data_cor$VernName <- NA
+if (!"ScientificName" %in% colnames(data_cor)) data_cor$ScientificName <- NA
+
+data_cor <- data_cor |>
+  mutate(
+    VernName = iconv(VernName, "UTF-8", "ASCII//TRANSLIT"),
+    ScientificName = iconv(ScientificName, "UTF-8", "ASCII//TRANSLIT")
+  ) |>
+  separate(VernName,
+    sep = "\\[|\\]", c("vernname_1", "vernname_2"),
+    extra = "drop", fill = "left", remove = FALSE
+  ) |>
+  mutate(
+    ScientificName = ifelse(
+      is.na(ScientificName) | grepl("\\[", ScientificName),
+      vernname_2, ScientificName
+    ),
+    vernname_1 = NULL,
+    vernname_2 = NULL
+  )
+
+# add genus and vername columns if missing
+if (!"Genus" %in% colnames(data_cor)) {
+  data_cor <- data_cor |>
+    separate(ScientificName, "Genus", extra = "drop", remove = FALSE)
+}
+```
+
+
+```{r}
+# add clean species information
+data_species <-
+  read.delim("data/derived_data/taxonomy_v2.tsv") |>
+  subset(site %in% unique(data_cor$Site)) |>
+  select(contains("cleaned") | contains("genus") | contains("species")) |>
+  unique()
+
+data_cor <- data_cor |>
+  separate(ScientificName, c("genus_raw", "species_raw"),
+    extra = "drop", fill = "right", remove = FALSE
+  ) |>
+  merge(data_species,
+    by = c("genus_raw", "species_raw"),
+    all.x = TRUE
+  )
+```
+
+
 ## Remove measurements other than live trees
 
 ### Remove dead trees
@@ -499,33 +551,6 @@ if ("LifeStatus" %in% colnames(data_cor)) {
 ### Remove life forms other than trees (lianas, palms, etc)
 
 ```{r life-form}
-if (!"VernName" %in% colnames(data_cor)) data_cor$VernName <- NA
-if (!"ScientificName" %in% colnames(data_cor)) data_cor$ScientificName <- NA
-
-data_cor <- data_cor |>
-  mutate(
-    VernName = iconv(VernName, "UTF-8", "ASCII//TRANSLIT"),
-    ScientificName = iconv(ScientificName, "UTF-8", "ASCII//TRANSLIT")
-  ) |>
-  separate(VernName,
-    sep = "\\[|\\]", c("vernname_1", "vernname_2"),
-    extra = "drop", fill = "left", remove = FALSE
-  ) |>
-  mutate(
-    ScientificName = ifelse(
-      is.na(ScientificName) | grepl("\\[", ScientificName),
-      vernname_2, ScientificName
-    ),
-    vernname_1 = NULL,
-    vernname_2 = NULL
-  )
-
-# add genus and vername columns if missing
-if (!"Genus" %in% colnames(data_cor)) {
-  data_cor <- data_cor |>
-    separate(ScientificName, "Genus", extra = "drop", remove = FALSE)
-}
-
 data_cor <- data_cor |>
   # subsetting to remove life forms other
   subset(!(LifeForm %in% c("Palm", "Tree fan", "Death", "Vine"))) |>
@@ -1039,28 +1064,7 @@ if (length(id_cor) > 0) {
 }
 ```
 
-# Add clean species information
-
-## Add clean taxonomy
-
-```{r}
-data_species <-
-  read.delim("data/derived_data/taxonomy_v2.tsv") |>
-  subset(site %in% unique(data_cor$Site)) |>
-  select(contains("cleaned") | contains("genus") | contains("species")) |>
-  unique()
-
-data_cor <- data_cor |>
-  separate(ScientificName, c("genus_raw", "species_raw"),
-    extra = "drop", fill = "left", remove = FALSE
-  ) |>
-  merge(data_species,
-    by = c("genus_raw", "species_raw"),
-    all.x = TRUE
-  )
-```
-
-## Add functional traits
+# Add functional traits
 
 ```{r}
 data_trait <- read.delim("data/derived_data/traits_v2.tsv") |>
