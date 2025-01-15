@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params:
-  site: misiones
+  site: kabo
 execute:
   echo: false      
 ---
@@ -1332,6 +1332,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year, next_census) |>
   summarise(nstem_mort = sum(1 / (next_census - Year) / unique(PlotArea))) |>
   mutate(Year = next_census) |>
+  subset(!is.na(Year)) |>
   ungroup() |>
   select(Site, Plot, Year, nstem_mort) |>
   pivot_longer(nstem_mort, names_to = "variable") |>
@@ -1421,6 +1422,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year, next_census) |>
   summarise(ba_mort = sum(ba / (next_census - Year) / PlotArea)) |>
   mutate(Year = next_census) |>
+  subset(!is.na(Year)) |>
   select(Site, Plot, Year, ba_mort) |>
   pivot_longer(ba_mort, names_to = "variable") |>
   rbind(data_aggr)
@@ -1527,6 +1529,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year, next_census) |>
   summarise(agb_mort = sum(agb / (next_census - Year) / PlotArea)) |>
   mutate(Year = next_census) |>
+  subset(!is.na(Year)) |>
   select(Site, Plot, Year, agb_mort) |>
   pivot_longer(agb_mort, names_to = "variable") |>
   rbind(data_aggr)
