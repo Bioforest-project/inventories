@@ -1462,7 +1462,7 @@ data_cor <- read.delim("data/derived_data/traits_v2.tsv") |>
     names_from = trait,
     values_from = trait_value_imputed
   ) |>
-  merge(data_cor, all.x = TRUE)
+  merge(data_cor, all.y = TRUE)
 
 p_na_wd <- round(sum(is.na(data_cor$WD)) / nrow(data_cor) * 100, 1)
 data_cor <- data_cor |>
