@@ -18,6 +18,7 @@ library(BIOMASS)
 library(ggplot2)
 library(tidyverse)
 library(entropart)
+library(fundiversity)
 ```
 
 # Introduction
@@ -46,7 +47,8 @@ data_raw <-
   data_list |>
   lapply(read.csv) |>
   rbindlist(fill = TRUE, use.names = TRUE) |>
-  as_tibble()
+  as_tibble() |>
+  mutate(Plot = as.character(Plot))
 ```
 
 ```{r create-data_cor}
@@ -1064,19 +1066,6 @@ if (length(id_cor) > 0) {
 }
 ```
 
-# Add functional traits
-
-```{r}
-data_trait <- read.delim("data/derived_data/traits_v2.tsv") |>
-  pivot_wider(
-    id_cols = "scientific_cleaned",
-    names_from = trait,
-    values_from = trait_value_imputed
-  )
-
-data_cor <- data_cor |>
-  merge(data_trait, by = "scientific_cleaned", all.x = TRUE)
-```
 
 # Data aggregation
 
@@ -1084,12 +1073,13 @@ data_cor <- data_cor |>
 data_aggr <- c()
 ```
 
-## Add information for flux calculation 
+## Add census year information for flux calculation 
 
 ```{r diff_year}
 #| message: false
 # for each census year, add information on previous and next census years
 data_year <- data_cor |>
+  ungroup() |>
   select(Site, Plot, Year) |>
   unique() |>
   arrange(Site, Plot, Year) |>
@@ -1106,9 +1096,8 @@ data_cor <- data_cor |>
   mutate(recr_year = min(Year), mort_year = max(Year), .by = IdStem)
 ```
 
-## Diversity metrics
 
-### Neutral diversity
+## Neutral diversity
 
 ```{r}
 # Calculate diversity indices per plot and year
@@ -1182,20 +1171,123 @@ data_aggr %>%
   theme_minimal()
 ```
 
-### Taxonomic (un)determination
+## Functional diversity and composition
+
+
+### Functional composition
+
+```{r}
+data_aggr <- data_cor |>
+  group_by(Site, Plot, Year, scientific_cleaned) |>
+  reframe(ba = (diameter_cor / 200)^2 * pi) |>
+  merge(
+    read.delim("data/derived_data/traits_v2.tsv"),
+    by = "scientific_cleaned"
+  ) |>
+  group_by(Site, Plot, Year, variable = paste0(trait, "_ba")) |>
+  reframe(value = weighted.mean(trait_value_imputed, ba)) |>
+  rbind(data_aggr)
+```
+
+```{r fig.height=8, fig.width=12}
+#| warning: false
+
+var_names <- c(
+  "LA_ba" = "Leaf area (mm2)",
+  "N_ba" = "Leaf nitrogen content per leaf dry mass (mg g-1)",
+  "SLA_ba" = "Specific leaf area (mm2 mg-1)",
+  "WD_ba" = "Stem specific wood density (g cm-3)",
+  "hmax_ba" = "Asymptotic height (m)"
+)
+
+data_aggr |>
+  subset(grepl("_ba$", variable)) |>
+  ggplot(aes(
+    x = Year, y = value, color = factor(Plot),
+    group = paste(Site, Plot)
+  )) +
+  geom_point() +
+  geom_line() +
+  labs(col = "Plot") +
+  theme_minimal() +
+  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+```
+
+### Functional diversity
+
+```{r}
+matrix_trait <- read.delim("data/derived_data/traits_v2.tsv") |>
+  subset(scientific_cleaned %in% data_cor$scientific_cleaned) |>
+  pivot_wider(
+    id_cols = "scientific_cleaned",
+    names_from = trait,
+    values_from = trait_value_imputed
+  ) |>
+  column_to_rownames("scientific_cleaned") |>
+  as.matrix()
+
+matrix_abund <- data_cor %>%
+  subset(!is.na(scientific_cleaned)) %>%
+  group_by(
+    meas_id = paste(Site, Plot, Year, sep = "__"),
+    scientific_cleaned
+  ) %>%
+  summarise(count = n(), .groups = "drop") |>
+  pivot_wider(
+    id_cols = "meas_id",
+    names_from = scientific_cleaned,
+    values_from = count,
+    values_fill = 0
+  ) |>
+  column_to_rownames("meas_id") |>
+  as.matrix()
+
+data_aggr <-
+  fd_fric(matrix_trait, matrix_abund, stand = TRUE) |>
+  merge(fd_fdiv(matrix_trait, matrix_abund)) |>
+  merge(fd_feve(matrix_trait, matrix_abund)) |>
+  merge(fd_fdis(matrix_trait, matrix_abund)) |>
+  separate(site, c("Site", "Plot", "Year"), sep = "__") |>
+  mutate(Year = as.numeric(Year)) |>
+  pivot_longer(starts_with("F"), names_to = "variable") |>
+  rbind(data_aggr)
+```
+
+```{r fig.height=8, fig.width=12}
+#| warning: false
+
+var_names <- c(
+  "FRic" = "Functional Richness (scaled)",
+  "FDiv" = "Functional Divergence",
+  "FEve" = "Functional Evenness",
+  "FDis" = "Functional Dispersion"
+)
+
+data_aggr |>
+  subset(grepl("^F", variable)) |>
+  ggplot(aes(
+    x = Year, y = value, color = factor(Plot),
+    group = paste(Site, Plot)
+  )) +
+  geom_point() +
+  geom_line() +
+  labs(col = "Plot") +
+  theme_minimal() +
+  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+```
+
+## Taxonomic (un)determination
 
 ```{r}
 # add information on percentage of undetermined species
-perc_undet <- data_cor |>
+data_aggr <- data_cor |>
   group_by(Site, Plot, Year) |>
   summarise(
-    p_undet_spp = sum(is.na(species_corrected)) / n(),
-    p_undet_gen = sum(is.na(genus_corrected)) / n(),
+    p_undet_spp = sum(is.na(species_cleaned)) / n(),
+    p_undet_gen = sum(is.na(genus_cleaned)) / n(),
   ) |>
-  pivot_longer(starts_with("p_undet"), names_to = "variable")
-
-data_aggr <- data_aggr |>
-  rbind(perc_undet)
+  pivot_longer(starts_with("p_undet"), names_to = "variable") |>
+  rbind(data_aggr)
 
 data_aggr |>
   subset(grepl("p_undet", variable)) |>
@@ -1225,7 +1317,6 @@ data_aggr <-
 ```{r recruitment}
 #| message: false
 data_aggr <- data_cor |>
-  # agb recruitment per tree
   mutate(recr = ifelse(Year == recr_year, 1 / (Year - prev_census), 0)) |>
   group_by(Site, Plot, Year) |>
   summarise(nstem_recr = sum(recr / PlotArea)) |>
@@ -1345,7 +1436,7 @@ var_names <- c(
 )
 
 data_aggr |>
-  subset(grepl("ba", variable)) |>
+  subset(grepl("^ba", variable)) |>
   ggplot(aes(
     x = Year, y = value, color = factor(Plot),
     group = paste(Site, Plot)
@@ -1363,6 +1454,16 @@ data_aggr |>
 We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground biomass.
 
 ```{r}
+# add wood density
+data_cor <- read.delim("data/derived_data/traits_v2.tsv") |>
+  subset(trait == "WD") |>
+  pivot_wider(
+    id_cols = "scientific_cleaned",
+    names_from = trait,
+    values_from = trait_value_imputed
+  ) |>
+  merge(data_cor, all.x = TRUE)
+
 p_na_wd <- round(sum(is.na(data_cor$WD)) / nrow(data_cor) * 100, 1)
 data_cor <- data_cor |>
   group_by(Site, Plot, Year) |>
