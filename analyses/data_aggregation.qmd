@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params:
-  site: peteco
+  site: mbaiki
 execute:
   echo: false      
 ---
@@ -1118,25 +1118,23 @@ data_cor <- data_cor |>
 ## Neutral diversity
 
 ```{r neutral-diversity}
-# Calculate diversity indices per plot and year
+# Calculate neutral diversity indices per plot and year
 
-# Count species occurrences/abundance by plot and year
-species_count <- data_cor %>%
+# species
+neutral_div_sp <- data_cor %>%
   subset(!is.na(species_corrected)) %>%
   group_by(Site, Plot, Year,
     scientific = paste(genus_corrected, species_corrected)
   ) %>%
-  summarise(count = n(), .groups = "drop")
-
-# Calculate neutral diversity indices per plot and year
-neutral_div_sp <- species_count %>%
+  summarise(count = n(), .groups = "drop") %>%
   group_by(Site, Plot, Year) %>%
   summarise(
     richness_sp = Richness(count),
-    diversity_q0_sp = Diversity(count, q = 0),
-    diversity_q1_sp = Diversity(count, q = 1),
-    diversity_q2_sp = Diversity(count, q = 2),
-    evenness_sp = Shannon(count) / log(n_distinct(scientific)),
+    diversity_q0_sp = Diversity(count, q = 0, SampleCoverage = 0.8),
+    diversity_q1_sp = Diversity(count, q = 1, SampleCoverage = 0.8),
+    diversity_q2_sp = Diversity(count, q = 2, SampleCoverage = 0.8),
+    evenness_sp = Shannon(count, SampleCoverage = 0.8) /
+      log(n_distinct(scientific)),
     coverage_sp = Coverage(count)
   ) %>%
   pivot_longer(
@@ -1145,6 +1143,7 @@ neutral_div_sp <- species_count %>%
     values_to = "value"
   )
 
+# genera
 neutral_div_gen <- data_cor %>%
   subset(!is.na(genus_corrected)) %>%
   group_by(Site, Plot, Year, genus = genus_corrected) %>%
@@ -1152,10 +1151,11 @@ neutral_div_gen <- data_cor %>%
   group_by(Site, Plot, Year) %>%
   summarise(
     richness_gen = Richness(count),
-    diversity_q0_gen = Diversity(count, q = 0),
-    diversity_q1_gen = Diversity(count, q = 1),
-    diversity_q2_gen = Diversity(count, q = 2),
-    evenness_gen = Shannon(count) / log(n_distinct(genus)),
+    diversity_q0_gen = Diversity(count, q = 0, SampleCoverage = 0.9),
+    diversity_q1_gen = Diversity(count, q = 1, SampleCoverage = 0.9),
+    diversity_q2_gen = Diversity(count, q = 2, SampleCoverage = 0.9),
+    evenness_gen = Shannon(count, SampleCoverage = 0.9) /
+      log(n_distinct(genus)),
     coverage_gen = Coverage(count)
   ) %>%
   pivot_longer(
@@ -1388,6 +1388,51 @@ data_aggr <- data_cor |>
     value = 1 - sum(!is.na(trait_value_raw)) / sum(!is.na(trait_value_imputed))
   ) |>
   rbind(data_aggr)
+```
+
+## Structural diversity
+
+```{r gini-coef}
+# as coded in package DescTools
+gini <- function(x, w = NULL, unbiased = TRUE) {
+  x <- x[!is.na(x)]
+  if (is.null(w)) w <- rep(1, length(x))
+  w <- w / sum(w)
+  x <- x[id <- order(x)]
+  w <- w[id]
+  f_hat <- w / 2 + c(0, head(cumsum(w), -1))
+  wm <- weighted.mean(x, w)
+  res <- 2 / wm * sum(w * (x - wm) * (f_hat - weighted.mean(f_hat, w)))
+  if (unbiased) {
+    res <- res * 1 / (1 - sum(w^2))
+  }
+  return(res)
+}
+
+data_aggr <- data_cor |>
+  group_by(Site, Plot, Year) |>
+  summarise(variable = "gini", value = gini(diameter_cor)) |>
+  rbind(data_aggr)
+```
+
+```{r dbh-mean}
+data_aggr <- data_cor |>
+  group_by(Site, Plot, Year) |>
+  summarise(variable = "dbh_median", value = median(diameter_cor)) |>
+  rbind(data_aggr)
+```
+
+```{r display-structural-div}
+var_names <- c("gini" = "Gini coefficient", "dbh_median" = "Median DBH (cm)")
+
+data_aggr |>
+  subset(variable %in% c("gini", "dbh_median")) |>
+  ggplot(aes(x = Year, y = value, color = factor(Plot))) +
+  geom_point() +
+  geom_line() +
+  labs(col = "Plot") +
+  theme_minimal() +
+  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
 
 ## Stem abundance
