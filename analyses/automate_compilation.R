@@ -9,7 +9,7 @@ raw_data_sites <- list.files("data/raw_data", "harmonized") |>
   unique()
 
 in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
-  subset(!is.na(longitude) & !is.na(Treatment) & Treatment != "") |>
+  subset(!is.na(longitude)) |>
   select(site) |>
   unlist() |>
   tolower() |>
@@ -19,7 +19,7 @@ in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
   iconv(to = "ASCII//TRANSLIT") |>
   unique()
 
-compile_sites <- intersect(raw_data_sites, in_plot_info)
+compile_sites <- intersect(raw_data_sites, c("kibale", in_plot_info))
 
 # cache: if we don't want to redo the compilation for files that already exist
 
@@ -48,3 +48,19 @@ if (length(compile_sites) > 0) {
     )
   }
 }
+
+# make one file with all sites
+list.files("data/derived_data", "aggregated_data_", full.names = TRUE) |>
+  lapply(read.csv) |>
+  data.table::rbindlist() |>
+  write.csv(file = "data/derived_data/aggregated_data.csv", row.names = FALSE)
+list.files("data/derived_data", "aggregated_data_", full.names = TRUE) |>
+  file.remove()
+
+# make one file with all sites - plot area
+list.files("data/derived_data", "plot_area", full.names = TRUE) |>
+  lapply(read.csv) |>
+  data.table::rbindlist() |>
+  write.csv(file = "data/derived_data/plot_area.csv", row.names = FALSE)
+list.files("data/derived_data", "plot_area_", full.names = TRUE) |>
+  file.remove()

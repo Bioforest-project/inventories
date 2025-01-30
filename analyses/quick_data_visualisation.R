@@ -12,7 +12,7 @@ plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
     silv_treat = grepl(silv_string, tolower(Treatment))
   ) |>
   ## remove plots that don't have coordinates and treatment information
-  subset(!is.na(longitude) & !is.na(Treatment)) |>
+  # subset(!is.na(longitude) & !is.na(Treatment)) |>
   select(site, plot, logging, silv_treat)
 
 data <- list.files("data/derived_data/", "aggregated", full.names = TRUE) |>
@@ -42,7 +42,10 @@ for (var in unique(data$variable)) {
       ),
       aes(label = Plot), col = 1
     ) +
-    scale_color_manual(values = c("forestgreen", "coral", "darkmagenta")) +
+    scale_color_manual(
+      values =
+        c("forestgreen", "coral", "darkmagenta", "grey")
+    ) +
     facet_wrap(~Site, scales = "free") +
     theme_minimal()
   ggsave(paste0("figures/summary_", var, ".pdf"), height = 15, width = 16)
