@@ -360,7 +360,7 @@ if (anyNA(data_cor$Diameter)) {
     perc_na_dbh,
     "% of the observations.",
     "The missing values are distributed across the plots",
-    "and censuses as follow:.",
+    "and censuses as follow:",
     sep = " "
   )
 } else {
