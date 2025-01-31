@@ -57,7 +57,7 @@ data_aggr |>
   geom_line(aes(y = BA_raw), col = "blue", linewidth = 0.8) +
   geom_line(aes(y = BA_cor),
     col = "red",
-    linetype = "dashed", linewidth = 0.8
+    linetype = "dotted", linewidth = 1
   ) +
   ylab("BA") +
   theme_minimal() +
@@ -81,6 +81,7 @@ data_aggr <- left_join(data_aggr, n_cor,
 ```
 
 ```{r graph_nb_tapcor}
+#| message: false
 data_aggr$Plot <- as.factor(data_aggr$Plot)
 data_aggr |>
   ggplot(aes(x = Year, y = n, colour = Plot, group = Plot)) +
@@ -92,9 +93,11 @@ data_aggr |>
 
 > Taper corrections are made on a high number of trees starting from 2018.
 
-# Explore differences of BA between corrected and uncorrected diameter
+# Explore differences in BA between corrected and uncorrected diameter
 
 I calculate the difference in BA (absolute and relative) due to the taper correction.
+
+## For all corrected trees
 
 ```{r calc_corr_effect}
 data_cor <- data_cor |>
@@ -112,3 +115,36 @@ data_cor |>
 ```
 
 > The relative correction in BA is correlated to the HOM (expected), but there seems to be a lot of over-corrected values for HOM = 4.5...
+
+## Explore the correction made at HOM = 4.5
+
+Which family?
+
+```{r}
+data_cor |>
+  filter(delta_cor != 0 & HOM == 4.5) |> 
+  group_by(family_cleaned) |>
+  count() |> 
+  arrange(desc(n))
+```
+
+## For all corrected trees, highlight families
+
+```{r}
+data_cor |>
+  filter(delta_cor != 0) |>
+  mutate(fam_4_cor = ifelse(family_cleaned %in% 
+                              c("Urticaceae", "Cannabaceae", "Moraceae"),
+                            family_cleaned,
+                            "Other family")) |>
+  mutate(fam_4_cor = factor(fam_4_cor,
+                            levels=c("Cannabaceae",
+                                    "Urticaceae", "Moraceae",
+                                    "Other family"))) |>
+  ggplot(aes(x = HOM, y = delta_cor_rel, colour = fam_4_cor)) +
+  geom_point(size = 3, alpha = 0.3) +
+  ylab("(BA corrected - BA raw) / BA raw") +
+  theme_minimal()
+```
+
+> Not really clear if the Urticaceae are over-corrected...
