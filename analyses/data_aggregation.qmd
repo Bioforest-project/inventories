@@ -7,6 +7,7 @@ format:
     colorlinks: true
 params:
   site: mbaiki
+  taper: false
 execute:
   echo: false      
 ---
@@ -849,163 +850,64 @@ data_cor$diameter_cor <- data_cor$Diameter
 
 ## Taper correction
 
-The taper correction estimates DBH for diameter values measured above breast height. We used the function from function from Cushman et al. (2014): $$ DBH = D \cdot e^{b(HOM - 1.3)}$$ where $DBH$ is the estimated diameter at breast height, $D$ is the measured diameter (cm) at height of measurement $HOM$ (m) and $b$ is defined as follows:
-
-$$b = e^{-2.0205 - 0.5053 ln(diam) + 0.3748 ln(HOM)}$$ Note: We did not use the equation from Cushman et al. (2020) because, although it includes additional data from a larger number of sites, the equation can give negative values of $b$, resulting in values of $DBH$ less than $D$. One solution in the future is to recalibrate the function using the original data from Cushman et al. (2020).
 
 ```{r taper-correction}
-taper <- function(diam, hom) {
+taper_function <- function(diam, hom) {
   # default hom (no correction) when there is no reliable information
   hom[is.na(hom) | hom <= 0 | hom > 20] <- 1.3
   b <- exp(-2.0205 - 0.5053 * log(diam) + 0.3748 * log(hom))
   return(diam * exp(b * (hom - 1.3)))
 }
 
-if (any(colnames(data_cor) == "HOM")) {
-  if (any(data_cor$HOM != 1.3)) {
-    text <- paste(
-      "The height of measurement information is available so we could apply",
-      "the taper correction from Cushman et al., 2014."
-    )
-    # harmonize HOM values
-    data_cor <- data_cor |>
-      mutate(HOM = as.numeric(HOM)) |>
-      # some values in cm: convert to m
-      mutate(HOM = ifelse(HOM >= 50, HOM / 100, HOM)) |>
-      # apply correction
-      mutate(diameter_cor = taper(diameter_cor, HOM))
+if (params$taper) {
+  if (any(colnames(data_cor) == "HOM")) {
+    if (any(data_cor$HOM != 1.3)) {
+      text <- paste(
+        "The taper correction estimates DBH for diameter values measured above",
+        "breast height. We used the function from function from Cushman et al.",
+        "(2014): DBH = D.exp(b(HOM - 1.3)) where DBH is the estimated diameter",
+        "at breast height, D is the measured diameter (cm) at height of",
+        "measurement HOM (m) and b is defined as follows:\n",
+        "b = exp(-2.0205 - 0.5053 ln(diam) + 0.3748 ln(HOM))."
+      )
+      # harmonize HOM values
+      data_cor <- data_cor |>
+        mutate(HOM = as.numeric(HOM)) |>
+        # some values in cm: convert to m
+        mutate(HOM = ifelse(HOM >= 50, HOM / 100, HOM)) |>
+        # apply correction
+        mutate(diameter_cor = taper_function(diameter_cor, HOM))
 
-    subset(data_cor, HOM != 1.3) |>
-      ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
-      geom_abline(intercept = 0, slope = 1, lty = 2) +
-      geom_point() +
-      labs(x = "Original diameter (cm)", y = "Taper-corrected diameter (cm)") +
-      scale_color_viridis_c() +
-      theme_classic()
+      subset(data_cor, HOM != 1.3) |>
+        ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
+        geom_abline(intercept = 0, slope = 1, lty = 2) +
+        geom_point() +
+        labs(
+          x = "Original diameter (cm)",
+          y = "Taper-corrected diameter (cm)"
+        ) +
+        scale_color_viridis_c() +
+        theme_classic()
+    } else {
+      text <- paste(
+        "All measurements were recorded as having been taken at HOM = 1.3 m,",
+        "so we did not need to apply a taper correction."
+      )
+    }
   } else {
     text <- paste(
-      "All measurements were recorded as having been taken at HOM = 1.3 m, so",
-      "we did not need to apply a taper correction."
+      "There is no information on height of measurement,",
+      "so we could not apply any taper correction."
     )
   }
 } else {
   text <- paste(
-    "There is no information on height of measurement,",
-    "so we could not apply any taper correction."
+    "We did not correct trees measured above 1.3 m for taper."
   )
 }
-```
-
-```{r taper-correction-bis}
-# This is to test the correction made when using the new equation for taper correction (test GD)
-# here I take the results of Model 1
-# THIS IS NOT GOOD
-#| eval: false
-taper <- function(diam, hom) {
-  # default hom (no correction) when there is no reliable information
-  hom[is.na(hom) | hom <= 0 | hom > 20] <- 1.3
-  b <- exp(-0.3091 -0.6147 * log(diam) -0.6071 * log(hom))
-  return(diam * exp(b * (hom - 1.3)))
-}
-
-if (any(colnames(data_cor) == "HOM")) {
-  if (any(data_cor$HOM != 1.3)) {
-    text <- paste(
-      "The height of measurement information is available so we could apply",
-      "the taper correction from Cushman et al., 2014."
-    )
-    # harmonize HOM values
-    data_cor <- data_cor |>
-      mutate(HOM = as.numeric(HOM)) |>
-      # some values in cm: convert to m
-      mutate(HOM = ifelse(HOM >= 50, HOM / 100, HOM)) |>
-      # apply correction
-      mutate(diameter_cor = taper(diameter_cor, HOM))
-
-    subset(data_cor, HOM != 1.3) |>
-      ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
-      geom_abline(intercept = 0, slope = 1, lty = 2) +
-      geom_point() +
-      labs(x = "Original diameter (cm)", y = "Taper-corrected diameter (cm)") +
-      scale_color_viridis_c() +
-      theme_classic()
-  } else {
-    text <- paste(
-      "All measurements were recorded as having been taken at HOM = 1.3 m, so",
-      "we did not need to apply a taper correction."
-    )
-  }
-} else {
-  text <- paste(
-    "There is no information on height of measurement,",
-    "so we could not apply any taper correction."
-  )
-}
-```
-
-```{r taper-correction-ter}
-# This is to test the model of the 2021 paper (test GD)
-#| eval: false
-taper <- function(diam, hom) {
-  # default hom (no correction) when there is no reliable information
-  hom[is.na(hom) | hom <= 0 | hom > 20] <- 1.3
-  b <-  0.156  -0.023 * log(diam) -0.021 * log(hom)
-  return(diam * exp(b * (hom - 1.3)))
-}
-
-if (any(colnames(data_cor) == "HOM")) {
-  if (any(data_cor$HOM != 1.3)) {
-    text <- paste(
-      "The height of measurement information is available so we could apply",
-      "the taper correction from Cushman et al., 2014."
-    )
-    # harmonize HOM values
-    data_cor <- data_cor |>
-      mutate(HOM = as.numeric(HOM)) |>
-      # some values in cm: convert to m
-      mutate(HOM = ifelse(HOM >= 50, HOM / 100, HOM)) |>
-      # apply correction
-      mutate(diameter_cor = taper(diameter_cor, HOM))
-
-    subset(data_cor, HOM != 1.3) |>
-      ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
-      geom_abline(intercept = 0, slope = 1, lty = 2) +
-      geom_point() +
-      labs(x = "Original diameter (cm)", y = "Taper-corrected diameter (cm)") +
-      scale_color_viridis_c() +
-      theme_classic()
-  } else {
-    text <- paste(
-      "All measurements were recorded as having been taken at HOM = 1.3 m, so",
-      "we did not need to apply a taper correction."
-    )
-  }
-} else {
-  text <- paste(
-    "There is no information on height of measurement,",
-    "so we could not apply any taper correction."
-  )
-}
-
-# data_cor |> filter(diameter_cor < Diameter) |> summarise(range(HOM))
-# the case when we have a lower corrected values are for cases when the HOM < 1.3
-
-# the correction seems ok for the low HOM but bad for the high ones...
-# in the 2021 paper, the range of HOM is 1.5 to 7.17
-    subset(data_cor, HOM != 1.3 & HOM < 7.2) |>
-      ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
-      geom_abline(intercept = 0, slope = 1, lty = 2) +
-      geom_point() +
-      labs(x = "Original diameter (cm)", y = "Taper-corrected diameter (cm)") +
-      scale_color_viridis_c() +
-      theme_classic()
-# it's not better...
-
 ```
 
 `r text`
-
-<!-- There are HOM below 1.3m.... We need to decide what to do with them -->
 
 ## Interpolating missing measurements
 
