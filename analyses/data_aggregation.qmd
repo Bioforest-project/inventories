@@ -1140,11 +1140,19 @@ neutral_div_sp <- data_cor %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(Site, Plot, Year) %>%
   summarise(
-    richness_sp = Richness(count),
-    diversity_q0_sp = Diversity(count, q = 0, SampleCoverage = 0.8),
-    diversity_q1_sp = Diversity(count, q = 1, SampleCoverage = 0.8),
-    diversity_q2_sp = Diversity(count, q = 2, SampleCoverage = 0.8),
-    evenness_sp = Shannon(count, SampleCoverage = 0.8) /
+    diversity_q0_sp = Diversity(count,
+      q = 0, SampleCoverage = 0.8,
+      Correction = "None"
+    ),
+    diversity_q1_sp = Diversity(count,
+      q = 1, SampleCoverage = 0.8,
+      Correction = "None"
+    ),
+    diversity_q2_sp = Diversity(count,
+      q = 2, SampleCoverage = 0.8,
+      Correction = "None"
+    ),
+    evenness_sp = Shannon(count, SampleCoverage = 0.8, Correction = "None") /
       log(n_distinct(scientific)),
     coverage_sp = Coverage(count)
   ) %>%
@@ -1161,11 +1169,19 @@ neutral_div_gen <- data_cor %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(Site, Plot, Year) %>%
   summarise(
-    richness_gen = Richness(count),
-    diversity_q0_gen = Diversity(count, q = 0, SampleCoverage = 0.9),
-    diversity_q1_gen = Diversity(count, q = 1, SampleCoverage = 0.9),
-    diversity_q2_gen = Diversity(count, q = 2, SampleCoverage = 0.9),
-    evenness_gen = Shannon(count, SampleCoverage = 0.9) /
+    diversity_q0_gen = Diversity(count,
+      q = 0, SampleCoverage = 0.9,
+      Correction = "None"
+    ),
+    diversity_q1_gen = Diversity(count,
+      q = 1, SampleCoverage = 0.9,
+      Correction = "None"
+    ),
+    diversity_q2_gen = Diversity(count,
+      q = 2, SampleCoverage = 0.9,
+      Correction = "None"
+    ),
+    evenness_gen = Shannon(count, SampleCoverage = 0.9, Correction = "None") /
       log(n_distinct(genus)),
     coverage_gen = Coverage(count)
   ) %>%
