@@ -1302,12 +1302,15 @@ data_aggr |>
 ### Functional diversity
 
 ```{r functional-div}
+traits_used <- c("WD", "SLA", "LA", "N")
 matrix_trait <- read.delim("data/derived_data/traits_v2.tsv") |>
   subset(scientific_cleaned %in% data_cor$scientific_cleaned) |>
+  subset(trait %in% traits_used) |>
+  mutate(log_trait_value_imputed = log(trait_value_imputed)) |>
   pivot_wider(
     id_cols = "scientific_cleaned",
     names_from = trait,
-    values_from = trait_value_imputed
+    values_from = log_trait_value_imputed
   ) |>
   column_to_rownames("scientific_cleaned") |>
   as.matrix()
@@ -1338,6 +1341,8 @@ data_aggr <-
   pivot_longer(starts_with("F"), names_to = "variable") |>
   rbind(data_aggr)
 ```
+
+We used the following log-transformed traits to compute functional diversity: `r trait_used`.
 
 ```{r fig-functional-div, fig.height=8, fig.width=12}
 #| warning: false
