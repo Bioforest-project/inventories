@@ -26,7 +26,7 @@ compile_sites <- intersect(raw_data_sites, c("nelliyampathy","tene2018", in_plot
 
 # cache: if we don't want to redo the compilation for files that already exist
 
-cache <- TRUE
+cache <- FALSE
 
 if (cache) {
   done <- list.files("reports/") |>
@@ -42,7 +42,7 @@ if (length(compile_sites) > 0) {
       input = "analyses/data_aggregation.qmd",
       output_format = "all",
       output_file = paste0("data_aggregation_", s, ".pdf"),
-      execute_params = list(site = s)
+      execute_params = list(site = s, taper = FALSE)
     )
     # move to "outputs/data_aggregation_reports" folder
     file.rename(
