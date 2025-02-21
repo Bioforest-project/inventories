@@ -1,25 +1,28 @@
 library(tidyverse)
 
 # automate qmd compilation
-raw_data_sites <- list.files("data/raw_data", "harmonized") |>
-  gsub(
-    pattern = "harmonized_data_|_v1.csv|_temoin|_t[0-9]|[0-9]",
-    replacement = ""
-  ) |>
+raw_data_sites <- gsub("^[^_]*_[^_]*_([^_]*)_.*$", "\\1", list.files("data/raw_data", "harmonized") ) |>
   unique()
+  #list.files("data/raw_data", "harmonized") |>
+  #gsub(
+  #  pattern = "harmonized_data_|_v1.csv|_v2.csv|_temoin|_t[0-9]|_control_|_logged_|_loggedonce_[0-9][0-9][0-9][0-9]_|_loggedtwice_[0-9][0-9][0-9][0-9]_|_prelogging_|_postlogging_",
+  #  replacement = ""
+  #unique()
 
-in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
+
+in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv", fileEncoding='latin1') |>
   subset(!is.na(longitude)) |>
   select(site) |>
   unlist() |>
   tolower() |>
-  gsub(pattern = " ", replacement = "_") |>
+  gsub(pattern = " ", replacement = "") |>
+  gsub(pattern = "_", replacement = "") |>
   gsub(pattern = "_km_|[0-9]", replacement = "") |>
   gsub(pattern = "sg_", replacement = "sungai_") |>
   iconv(to = "ASCII//TRANSLIT") |>
   unique()
 
-compile_sites <- intersect(raw_data_sites, c("kibale", in_plot_info))
+compile_sites <- intersect(raw_data_sites, c("nelliyampathy","tene2018", in_plot_info))
 
 # cache: if we don't want to redo the compilation for files that already exist
 
