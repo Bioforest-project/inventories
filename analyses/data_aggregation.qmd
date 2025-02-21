@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params:
-  site: mbaiki
+  site: nelliyampathy
 execute:
   echo: false      
 ---
@@ -48,7 +48,11 @@ data_raw <-
   lapply(read.csv) |>
   rbindlist(fill = TRUE, use.names = TRUE) |>
   as_tibble() |>
-  mutate(Plot = as.character(Plot))
+  mutate(Plot = as.character(Plot)) |>
+  mutate(Site = tolower(Site)) |>
+  mutate(Site, gsub(pattern = " ", replacement = "", Site)) |>
+  mutate(site = gsub(pattern = "_", replacement = "", Site))
+  
 ```
 
 ```{r create-data-cor}
@@ -87,17 +91,21 @@ if (!file.exists("data/raw_data/bioforest-plot-information.csv")) {
 }
 plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
   mutate(site = ifelse(site == "BAFOG", "Bafog", site)) |>
-  mutate(site = ifelse(site == "Montagne_tortue", "Montagne_Tortue", site)) |>
-  subset(site %in% unique(data_cor$Site))
+  mutate(site = ifelse(site == "Montagne_tortue", "montagnetortue", site)) |>
+  mutate(site = tolower(site)) |>
+  mutate(site, gsub(pattern = " ", replacement = "", site)) |>
+  mutate(site = gsub(pattern = "_", replacement = "", site)) |>
+  subset(tolower(site) %in% tolower(unique(data_cor$Site)))
 ```
 
 ```{r add-missing-plot-coordinates}
 # temporarily add plot information when missing online
 plot_information <- plot_information |>
-  mutate(
-    longitude = ifelse(site == "Kibale", 30.425, longitude),
-    latitude = ifelse(site == "Kibale", 0.45, latitude)
-  ) |>
+  #kibale coordinates added
+  #mutate(
+  # longitude = ifelse(site == "Kibale", 30.425, longitude),
+  #  latitude = ifelse(site == "Kibale", 0.45, latitude)
+  #) |>
   # temporary: some plots in MBaiki have the switched coordinates
   mutate(
     latitude_cor = ifelse(site == "Mbaiki" & latitude > 4, longitude, latitude),
@@ -140,7 +148,8 @@ data_missing <- data_cor |>
 
 # add plot-level information to the table
 data_cor <- data_cor |>
-  merge(plot_information, by.x = c("Site", "Plot"), by.y = c("site", "plot"))
+  merge(plot_information, 
+        by.x = c("Site", "Plot"), by.y = c("site", "plot"))
 
 missing <- paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")
 
@@ -155,8 +164,7 @@ text <- ifelse(
 if (nrow(data_cor) == 0) {
   stop(paste0(
     "Please check the information (coordinates and treatment) ",
-    "on the online document: https://docs.google.com/spreadsheets/d/",
-    "1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link"
+    "on the online document: https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link"
   ))
 }
 ```
@@ -610,13 +618,22 @@ if ("LifeStatus" %in% colnames(data_cor)) {
 ### Remove life forms other than trees (lianas, palms, etc)
 
 ```{r select-life-form}
+if ("LifeForm" %in% colnames(data_cor)){
 data_cor <- data_cor |>
   # subsetting to remove life forms other
-  subset(!(tolower(LifeForm) %in% c("palm", "tree fan", "death", "vine"))) |>
+  subset(!(tolower(LifeForm) %in% c("palm", "tree fan", "death",     "vine"))) |>
   # remove palm genera or vernacular names
   subset(family_cleaned != "Arecaceae" | is.na(family_cleaned)) |>
   # Astrocaryum vernacular name in Paracou, only identified to vern name
   subset(is.na(VernName) | VernName != "murumuru")
+
+} else {
+  text <- paste(
+    "There was no column 'LifeForm' with information about life forms",
+    "(such as trees, lianas, palms), so we assume that all individuals in your dataset are trees.",
+    "Please let us know if that is not the case."
+  )
+}
 ```
 
 ## Consistency of stem-level information
