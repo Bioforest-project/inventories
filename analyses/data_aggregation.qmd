@@ -43,6 +43,7 @@ data_list <- list.files("data/raw_data/", params$site, full.names = TRUE)
 if (length(data_list) == 0) {
   stop("Please check that the site name in params matches your data file name.")
 }
+# extracting data file and creating consistent site names
 data_raw <-
   data_list |>
   lapply(read.csv) |>
@@ -52,7 +53,6 @@ data_raw <-
   mutate(Site = tolower(Site)) |>
   mutate(Site, gsub(pattern = " ", replacement = "", Site)) |>
   mutate(site = gsub(pattern = "_", replacement = "", Site))
-  
 ```
 
 ```{r create-data-cor}
