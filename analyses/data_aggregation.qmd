@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params:
-  site: km67
+  site: nelliyampathy
 execute:
   echo: false      
 ---
@@ -51,8 +51,10 @@ data_raw <-
   as_tibble() |>
   mutate(Plot = as.character(Plot)) |>
   mutate(Site = tolower(Site)) |>
-  mutate(Site, gsub(pattern = " ", replacement = "", Site)) |>
-  mutate(site = gsub(pattern = "_", replacement = "", Site))
+  mutate(Site = gsub(pattern = " ", replacement = "", Site)) |>
+  mutate(Site = gsub(pattern = "_", replacement = "", Site)) |>
+  mutate(Site = gsub(pattern = "sg", replacement = "sungai", Site))
+
 ```
 
 ```{r create-data-cor}
@@ -93,7 +95,7 @@ plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
   mutate(site = ifelse(site == "BAFOG", "Bafog", site)) |>
   mutate(site = ifelse(site == "Montagne_tortue", "montagnetortue", site)) |>
   mutate(site = tolower(site)) |>
-  mutate(site, gsub(pattern = " ", replacement = "", site)) |>
+  mutate(site = gsub(pattern = " ", replacement = "", site)) |>
   mutate(site = gsub(pattern = "_", replacement = "", site)) |>
   subset(tolower(site) %in% tolower(unique(data_cor$Site)))
 ```
@@ -106,15 +108,11 @@ plot_information <- plot_information |>
   # longitude = ifelse(site == "Kibale", 30.425, longitude),
   #  latitude = ifelse(site == "Kibale", 0.45, latitude)
   #) |>
-  mutate(
-    longitude_cor = ifelse(site == "km67", replace_na(longitude, -54.930322), longitude),
-    latitude_cor = ifelse(site == "km67", replace_na(latitude, -54.930322), latitude)
-  ) |>
   # temporary: some plots in MBaiki have the switched coordinates
-  #mutate(
-  #  latitude_cor = ifelse(site == "Mbaiki" & latitude > 4, longitude, latitude),
-  #  longitude_cor = ifelse(site == "Mbaiki" & latitude > 4, latitude, longitude)
-  #) |>
+  mutate(
+    latitude_cor = ifelse(site == "Mbaiki" & latitude > 4, longitude, latitude),
+    longitude_cor = ifelse(site == "Mbaiki" & latitude > 4, latitude, longitude)
+  ) |>
   # remove "subplot" from Tene data
   mutate(plot = gsub("Subplot_", "", plot))
 ```

@@ -17,7 +17,7 @@ in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv", fileEnc
   gsub(pattern = " ", replacement = "") |>
   gsub(pattern = "_", replacement = "") |>
   #gsub(pattern = "_km_|[0-9]", replacement = "") |>
-  gsub(pattern = "sg_", replacement = "sungai") |>
+  #gsub(pattern = "sg_", replacement = "sungai") |>
   iconv(to = "ASCII//TRANSLIT") |>
   unique()
 
@@ -25,12 +25,12 @@ in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv", fileEnc
 compile_sites <- intersect(raw_data_sites, c("tene2018", in_plot_info))
 
 #removing sites that are not working 
-remove <- c("nelliyampathy", "km67", "mil", "strek", "sungailalang", "ulumuda", "uppangala")
+remove <- c( "nelliyampathy")
 compile_sites <- compile_sites[!compile_sites %in% remove] 
 
 # cache: if we don't want to redo the compilation for files that already exist
 
-cache <- TRUE
+cache <- FALSE
 
 if (cache) {
   done <- list.files("reports/") |>
