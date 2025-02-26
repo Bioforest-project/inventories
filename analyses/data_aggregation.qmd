@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params:
-  site: nelliyampathy
+  site: km67
 execute:
   echo: false      
 ---
@@ -106,11 +106,15 @@ plot_information <- plot_information |>
   # longitude = ifelse(site == "Kibale", 30.425, longitude),
   #  latitude = ifelse(site == "Kibale", 0.45, latitude)
   #) |>
-  # temporary: some plots in MBaiki have the switched coordinates
   mutate(
-    latitude_cor = ifelse(site == "Mbaiki" & latitude > 4, longitude, latitude),
-    longitude_cor = ifelse(site == "Mbaiki" & latitude > 4, latitude, longitude)
+    longitude_cor = ifelse(site == "km67", replace_na(longitude, -54.930322), longitude),
+    latitude_cor = ifelse(site == "km67", replace_na(latitude, -54.930322), latitude)
   ) |>
+  # temporary: some plots in MBaiki have the switched coordinates
+  #mutate(
+  #  latitude_cor = ifelse(site == "Mbaiki" & latitude > 4, longitude, latitude),
+  #  longitude_cor = ifelse(site == "Mbaiki" & latitude > 4, latitude, longitude)
+  #) |>
   # remove "subplot" from Tene data
   mutate(plot = gsub("Subplot_", "", plot))
 ```
