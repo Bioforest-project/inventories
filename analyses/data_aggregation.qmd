@@ -6,12 +6,10 @@ format:
     number-sections: true
     colorlinks: true
 params:
-<<<<<<< HEAD
-  site: nelliyampathy
-=======
+
   site: mbaiki
   taper: false
->>>>>>> 13bdf2b3ef3022c6e5105c399db9abc9f363d951
+
 execute:
   echo: false      
 ---
