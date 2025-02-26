@@ -9,7 +9,6 @@ raw_data_sites <- gsub("^[^_]*_[^_]*_([^_]*)_.*$", "\\1", list.files("data/raw_d
   #  replacement = ""
   #unique()
 
-
 in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv", fileEncoding='latin1') |>
   subset(!is.na(longitude)) |>
   select(site) |>
@@ -17,12 +16,17 @@ in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv", fileEnc
   tolower() |>
   gsub(pattern = " ", replacement = "") |>
   gsub(pattern = "_", replacement = "") |>
-  gsub(pattern = "_km_|[0-9]", replacement = "") |>
-  gsub(pattern = "sg_", replacement = "sungai_") |>
+  #gsub(pattern = "_km_|[0-9]", replacement = "") |>
+  #gsub(pattern = "sg_", replacement = "sungai") |>
   iconv(to = "ASCII//TRANSLIT") |>
   unique()
 
-compile_sites <- intersect(raw_data_sites, c("nelliyampathy","tene2018", in_plot_info))
+#compile_sites <- intersect(raw_data_sites, c("nelliyampathy","tene2018", in_plot_info))
+compile_sites <- intersect(raw_data_sites, c("tene2018", in_plot_info))
+
+#removing sites that are not working 
+remove <- c( "nelliyampathy")
+compile_sites <- compile_sites[!compile_sites %in% remove] 
 
 # cache: if we don't want to redo the compilation for files that already exist
 

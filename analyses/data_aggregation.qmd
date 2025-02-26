@@ -48,6 +48,7 @@ data_list <- list.files("data/raw_data/", params$site, full.names = TRUE)
 if (length(data_list) == 0) {
   stop("Please check that the site name in params matches your data file name.")
 }
+# extracting data file and creating consistent site names
 data_raw <-
   data_list |>
   lapply(read.csv) |>
@@ -55,9 +56,10 @@ data_raw <-
   as_tibble() |>
   mutate(Plot = as.character(Plot)) |>
   mutate(Site = tolower(Site)) |>
-  mutate(Site, gsub(pattern = " ", replacement = "", Site)) |>
-  mutate(site = gsub(pattern = "_", replacement = "", Site))
-  
+  mutate(Site = gsub(pattern = " ", replacement = "", Site)) |>
+  mutate(Site = gsub(pattern = "_", replacement = "", Site)) |>
+  mutate(Site = gsub(pattern = "sg", replacement = "sungai", Site))
+
 ```
 
 ```{r create-data-cor}
@@ -98,7 +100,7 @@ plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
   mutate(site = ifelse(site == "BAFOG", "Bafog", site)) |>
   mutate(site = ifelse(site == "Montagne_tortue", "montagnetortue", site)) |>
   mutate(site = tolower(site)) |>
-  mutate(site, gsub(pattern = " ", replacement = "", site)) |>
+  mutate(site = gsub(pattern = " ", replacement = "", site)) |>
   mutate(site = gsub(pattern = "_", replacement = "", site)) |>
   subset(tolower(site) %in% tolower(unique(data_cor$Site)))
 ```
