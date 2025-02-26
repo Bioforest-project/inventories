@@ -46,7 +46,7 @@ if (length(compile_sites) > 0) {
       input = "analyses/data_aggregation.qmd",
       output_format = "all",
       output_file = paste0("data_aggregation_", s, ".pdf"),
-      execute_params = list(site = s)
+      execute_params = list(site = s, taper = FALSE)
     )
     # move to "outputs/data_aggregation_reports" folder
     file.rename(
