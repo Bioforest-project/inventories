@@ -6,7 +6,6 @@ format:
     number-sections: true
     colorlinks: true
 params:
-
   site: nelliyampathy
   taper: false
 
@@ -46,8 +45,15 @@ data_list <- list.files("data/raw_data/", params$site, full.names = TRUE)
 if (length(data_list) == 0) {
   stop("Please check that the site name in params matches your data file name.")
 }
+```
+
+```{r create-data-cor}
+data_cor <- data_raw
+```
+
+```{r harmonize-site-name}
 # extracting data file and creating consistent site names
-data_raw <-
+data_cor <-
   data_list |>
   lapply(read.csv) |>
   rbindlist(fill = TRUE, use.names = TRUE) |>
@@ -57,10 +63,6 @@ data_raw <-
   mutate(Site = gsub(pattern = " ", replacement = "", Site)) |>
   mutate(Site = gsub(pattern = "_", replacement = "", Site)) |>
   mutate(Site = gsub(pattern = "sg", replacement = "sungai", Site))
-```
-
-```{r create-data-cor}
-data_cor <- data_raw
 ```
 
 ```{r remove-values}
@@ -560,7 +562,7 @@ if (anyNA(data_cor$scientific_cleaned)) {
 
 `r text`
 
-```{r  display-taxo-resolution}
+```{r display-taxo-resolution}
 data_cor |>
   group_by(Site, Plot, Year) |>
   summarise(
