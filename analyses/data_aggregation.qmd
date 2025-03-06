@@ -6,8 +6,10 @@ format:
     number-sections: true
     colorlinks: true
 params:
+
   site: nelliyampathy
   taper: false
+
 execute:
   echo: false      
 ---
@@ -514,7 +516,7 @@ if (!"Genus" %in% colnames(data_cor)) {
 ```{r add-clean-taxonomy}
 # add clean species information
 data_species <-
-  read.delim("data/derived_data/taxonomy_v2.tsv") |>
+  read.delim("data/derived_data/taxonomy_v3.tsv") |>
   select(contains("cleaned") | contains("genus") | contains("species")) |>
   unique()
 
@@ -1244,7 +1246,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v2.tsv"),
+    read.delim("data/derived_data/traits_v3.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_ba")) |>
@@ -1257,7 +1259,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v2.tsv"),
+    read.delim("data/derived_data/traits_v3.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_n")) |>
@@ -1296,7 +1298,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v2.tsv"),
+    read.delim("data/derived_data/traits_v3.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwv_n")) |>
@@ -1332,7 +1334,7 @@ data_aggr |>
 
 ```{r functional-div}
 traits_used <- c("WD", "SLA", "LA", "N")
-matrix_trait <- read.delim("data/derived_data/traits_v2.tsv") |>
+matrix_trait <- read.delim("data/derived_data/traits_v3.tsv") |>
   subset(scientific_cleaned %in% data_cor$scientific_cleaned) |>
   subset(trait %in% traits_used) |>
   mutate(log_trait_value_imputed = log(trait_value_imputed)) |>
@@ -1425,7 +1427,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v2.tsv"),
+    read.delim("data/derived_data/traits_v3.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0("p_imputed_", trait)) |>
@@ -1645,7 +1647,7 @@ We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground bi
 
 ```{r add-wd}
 # add wood density
-data_cor <- read.delim("data/derived_data/traits_v2.tsv") |>
+data_cor <- read.delim("data/derived_data/traits_v3.tsv") |>
   subset(trait == "WD") |>
   pivot_wider(
     id_cols = "scientific_cleaned",
