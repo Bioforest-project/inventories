@@ -1256,7 +1256,6 @@ data_aggr <- data_cor |>
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_ba")) |>
-  reframe(value = weighted.mean(trait_value_imputed, ba)) |>
   reframe(value = exp(weighted.mean(log(trait_value_imputed, ba)))) |>
   rbind(data_aggr)
 ```
