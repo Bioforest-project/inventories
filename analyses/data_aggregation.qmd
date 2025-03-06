@@ -1379,7 +1379,7 @@ data_aggr <-
   rbind(data_aggr)
 ```
 
-We used the following log-transformed traits to compute functional diversity: `r trait_used`.
+We used the following log-transformed traits to compute functional diversity: `r traits_used`.
 
 ```{r fig-functional-div, fig.height=8, fig.width=12}
 #| warning: false
