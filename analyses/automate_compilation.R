@@ -30,7 +30,7 @@ compile_sites <- compile_sites[!compile_sites %in% remove]
 
 # cache: if we don't want to redo the compilation for files that already exist
 
-cache <- FALSE
+cache <- TRUE
 
 if (cache) {
   done <- list.files("reports/") |>
