@@ -519,69 +519,16 @@ data_cor <- data_cor %>% filter(Diameter >= MinDBH & Diameter >= 10)
 
 ## Clean species information
 
-```{r clean-species-information}
-# clean columns with taxonomic information (vernacular and scientific)
-if (!"VernName" %in% colnames(data_cor)) data_cor$VernName <- NA
-if (!"ScientificName" %in% colnames(data_cor)) data_cor$ScientificName <- NA
-
-data_cor <- data_cor |>
-  mutate(
-    VernName = iconv(VernName, "UTF-8", "ASCII//TRANSLIT"),
-    ScientificName = iconv(ScientificName, "UTF-8", "ASCII//TRANSLIT")
-  ) |>
-  separate(VernName,
-    sep = "\\[|\\]", c("vernname_1", "vernname_2"),
-    extra = "drop", fill = "left", remove = FALSE
-  ) |>
-  mutate(
-    ScientificName = ifelse(
-      is.na(ScientificName) | grepl("\\[", ScientificName),
-      vernname_2, ScientificName
-    ),
-    vernname_1 = NULL,
-    vernname_2 = NULL
-  )
-
-# add genus and vername columns if missing
-if (!"Genus" %in% colnames(data_cor)) {
-  data_cor <- data_cor |>
-    separate(ScientificName, "Genus", extra = "drop", remove = FALSE)
-}
-```
 
 ```{r add-clean-taxonomy}
-# add clean species information
-data_species <-
-  read.delim("data/derived_data/taxonomy_v3.tsv") |>
-  select(contains("cleaned") | contains("genus") | contains("species")) |>
-  unique()
-
-data_cor <- data_cor |>
-  separate(ScientificName, c("genus_raw", "species_raw"),
-    extra = "drop", fill = "right", remove = FALSE
-  ) |>
-  merge(data_species,
-    by = c("genus_raw", "species_raw"),
-    all.x = TRUE
-  )
-```
-
-
-```{r add-clean-taxonomy}
-# add clean species information
-data_species <-
+data_species <- 
   read.delim("data/derived_data/taxonomy_v3.1.tsv") |>
   select(contains("cleaned") | contains("tax_id")) |>
-  unique()
+  distinct(tax_id, .keep_all = TRUE)  
 
 data_cor <- data_cor |>
-  separate(ScientificName, c("genus_raw", "species_raw"),
-    extra = "drop", fill = "right", remove = FALSE
-  ) |>
-  merge(data_species,
-    by = c("tax_id", "tax_id"),
-    all.x = TRUE
-  )
+  left_join(data_species, by = "tax_id")
+
 ```
 
 ### Level of taxonomic resolution
@@ -593,7 +540,7 @@ if (anyNA(data_cor$scientific_cleaned)) {
     sum(is.na(data_cor$scientific_cleaned)) * 100 / dim(data_cor)[1], 2
   )
   nb_na_sp_tree <- data_cor %>%
-    filter(is.na(ScientificName)) %>%
+    filter(is.na(scientific_cleaned)) %>%
     summarise((length(unique(IdTree))))
   text <- paste("There are",
     nb_na_sp,
@@ -1202,9 +1149,8 @@ data_cor <- data_cor |>
 
 # species
 neutral_div_sp <- data_cor %>%
-  subset(!is.na(species_corrected)) %>%
-  group_by(Site, Plot, Year,
-    scientific = paste(genus_corrected, species_corrected)
+  subset(!is.na(species_cleaned)) %>%
+  group_by(Site, Plot, Year,scientific_cleaned
   ) %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(Site, Plot, Year) %>%
@@ -1222,7 +1168,7 @@ neutral_div_sp <- data_cor %>%
       Correction = "None"
     ),
     evenness_sp = Shannon(count, SampleCoverage = 0.8, Correction = "None") /
-      log(n_distinct(scientific)),
+      log(n_distinct(scientific_cleaned)),
     coverage_sp = Coverage(count)
   ) %>%
   pivot_longer(
@@ -1233,8 +1179,8 @@ neutral_div_sp <- data_cor %>%
 
 # genera
 neutral_div_gen <- data_cor %>%
-  subset(!is.na(genus_corrected)) %>%
-  group_by(Site, Plot, Year, genus = genus_corrected) %>%
+  subset(!is.na(genus_cleaned)) %>%
+  group_by(Site, Plot, Year, genus = genus_cleaned) %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(Site, Plot, Year) %>%
   summarise(
