@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params:
-  site: nelliyampathy
+  site: bafog
   taper: false
 
 execute:
@@ -45,17 +45,47 @@ data_list <- list.files("data/raw_data/", params$site, full.names = TRUE)
 if (length(data_list) == 0) {
   stop("Please check that the site name in params matches your data file name.")
 }
+
+#importing site names corrections table
+sites <- read.csv("data/raw_data/site_name_correction.csv") |> 
+  separate_rows(site_raw)
+
+# creating a taxonomic ID to use for joining wrong and corrected taxa
+read_harmonized <- function(file){
+  cols <- c(ScientificName = NA_character_,
+            VernName = NA_character_,
+            Family = NA_character_,
+            Genus = NA_character_,
+            Species = NA_character_)
+  read_csv(file,
+           locale = readr::locale(encoding = "latin1"),
+           col_types = cols()) %>%
+    add_column(!!!cols[!names(cols) %in% names(.)]) %>% 
+  mutate(tax_id = as.numeric(as.factor(paste(ScientificName,
+                                             VernName,
+                                             Family,
+                                             Genus,
+                                             Species))))
+}
+
 # extracting data file and creating consistent site names
 data_raw <-
   data_list |>
-  lapply(read.csv) |>
-  rbindlist(fill = TRUE, use.names = TRUE) |>
-  as_tibble() |>
-  mutate(Plot = as.character(Plot)) |>
-  mutate(Site = tolower(Site)) |>
-  mutate(Site = gsub(pattern = " ", replacement = "", Site)) |>
-  mutate(Site = gsub(pattern = "_", replacement = "", Site)) |>
-  mutate(Site = gsub(pattern = "sg", replacement = "sungai", Site))
+  #lapply(read.csv) |>
+  #rbindlist(fill = TRUE, use.names = TRUE) |>
+  read_harmonized() |>
+  mutate(Site = as.character(Site)) |> 
+  rename(site_raw = Site) |>
+  left_join(sites) |> 
+  select(-site_raw) |>
+  rename(Site = site)
+  
+#as_tibble() |>
+#  mutate(Plot = as.character(Plot)) |>
+#  mutate(Site = tolower(Site)) |>
+#  mutate(Site = gsub(pattern = " ", replacement = "", Site)) |>
+#  mutate(Site = gsub(pattern = "_", replacement = "", Site)) |>
+#  mutate(Site = gsub(pattern = "sg", replacement = "sungai", #Site))
 ```
 
 ```{r create-data-cor}
@@ -93,12 +123,19 @@ if (!file.exists("data/raw_data/bioforest-plot-information.csv")) {
   # TODO solve authentication error
 }
 plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
-  mutate(site = ifelse(site == "BAFOG", "Bafog", site)) |>
-  mutate(site = ifelse(site == "Montagne_tortue", "montagnetortue", site)) |>
-  mutate(site = tolower(site)) |>
-  mutate(site = gsub(pattern = " ", replacement = "", site)) |>
-  mutate(site = gsub(pattern = "_", replacement = "", site)) |>
-  subset(tolower(site) %in% tolower(unique(data_cor$Site)))
+  mutate(site = as.character(site)) |> 
+  rename(site_raw = site) |>
+  left_join(sites) |> 
+  select(-site_raw) |>
+  subset(site %in% unique(data_cor$Site))
+
+  
+  #mutate(site = ifelse(site == "BAFOG", "Bafog", site)) |>
+  #mutate(site = ifelse(site == "Montagne_tortue", "montagnetortue", site)) |>
+  #mutate(site = tolower(site)) |>
+  #mutate(site = gsub(pattern = " ", replacement = "", site)) |>
+  #mutate(site = gsub(pattern = "_", replacement = "", site)) |>
+  #subset(tolower(site) %in% tolower(unique(data_cor$Site)))
 ```
 
 ```{r add-missing-plot-coordinates}
@@ -174,7 +211,7 @@ If needed, you can add any missing information to the [online document](https://
 
 # General presentation of the data
 
-This document presents the data aggregation for the `r paste(unique(data_cor$Site), collapse = ", ")` site(s). The site(s) have `r length(unique(data_cor$Plot))` plots: `r unique(data_cor$Plot)`.
+This document presents the data aggregation for the `r paste(unique(data_cor$Site), collapse = ", ")` site(s). The site(s) have `r length(unique(data_cor$Plot))` plots: `r unique(data_cor$Plot)`
 
 It has `r dim(data_cor)[1]` observations, belonging to `r length(unique(data_cor$IdStem))` stems.
 
@@ -525,6 +562,24 @@ data_cor <- data_cor |>
   ) |>
   merge(data_species,
     by = c("genus_raw", "species_raw"),
+    all.x = TRUE
+  )
+```
+
+
+```{r add-clean-taxonomy}
+# add clean species information
+data_species <-
+  read.delim("data/derived_data/taxonomy_v3.1.tsv") |>
+  select(contains("cleaned") | contains("tax_id")) |>
+  unique()
+
+data_cor <- data_cor |>
+  separate(ScientificName, c("genus_raw", "species_raw"),
+    extra = "drop", fill = "right", remove = FALSE
+  ) |>
+  merge(data_species,
+    by = c("tax_id", "tax_id"),
     all.x = TRUE
   )
 ```
