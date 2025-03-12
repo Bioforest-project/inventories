@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params:
-  site: bafog
+  site: corinto
   taper: false
 
 execute:
@@ -48,7 +48,7 @@ if (length(data_list) == 0) {
 
 #importing site names corrections table
 sites <- read.csv("data/raw_data/site_name_correction.csv") |> 
-  separate_rows(site_raw)
+  separate_rows(site_raw, sep = ",")
 
 # creating a taxonomic ID to use for joining wrong and corrected taxa
 read_harmonized <- function(file){
@@ -57,40 +57,58 @@ read_harmonized <- function(file){
             Family = NA_character_,
             Genus = NA_character_,
             Species = NA_character_)
-  read_csv(file,
+           read_csv(file,
            locale = readr::locale(encoding = "latin1"),
            col_types = cols()) %>%
-    add_column(!!!cols[!names(cols) %in% names(.)]) %>% 
+    add_column(!!!cols[!names(cols) %in% names(.)]) |>
   mutate(tax_id = as.numeric(as.factor(paste(ScientificName,
                                              VernName,
                                              Family,
                                              Genus,
-                                             Species))))
+                                             Species)))) |>
+  mutate(file = gsub("data/raw_data/", "", file))
 }
 
 # extracting data file and creating consistent site names
 data_raw <-
   data_list |>
-  #lapply(read.csv) |>
   #rbindlist(fill = TRUE, use.names = TRUE) |>
-  read_harmonized() |>
+  lapply(read_harmonized) |>
+  bind_rows() |>
   mutate(Site = as.character(Site)) |> 
   rename(site_raw = Site) |>
   left_join(sites) |> 
   select(-site_raw) |>
-  rename(Site = site)
-  
+  rename(Site = site) |>
+  mutate(Plot = as.character(Plot)) 
+
 #as_tibble() |>
-#  mutate(Plot = as.character(Plot)) |>
 #  mutate(Site = tolower(Site)) |>
 #  mutate(Site = gsub(pattern = " ", replacement = "", Site)) |>
 #  mutate(Site = gsub(pattern = "_", replacement = "", Site)) |>
 #  mutate(Site = gsub(pattern = "sg", replacement = "sungai", #Site))
+
 ```
 
 ```{r create-data-cor}
 data_cor <- data_raw
 ```
+
+## Clean species information
+
+```{r merge-cleaned-taxonomy}
+data_species <- 
+  read_tsv("data/derived_data/taxonomy_v3.tsv") |>
+  select(contains("cleaned") | "tax_id" | "file") 
+
+if (!all(unique(data_cor$file) %in% unique(data_species$file))){
+  error("This file does not have clean taxonomy")
+}
+
+data_cor <- data_cor |>
+  left_join(data_species, by = c("tax_id", "file"))
+```
+
 
 ```{r remove-values}
 # some values (partial censuses, etc) need to be removed in some sites
@@ -129,7 +147,6 @@ plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
   select(-site_raw) |>
   subset(site %in% unique(data_cor$Site))
 
-  
   #mutate(site = ifelse(site == "BAFOG", "Bafog", site)) |>
   #mutate(site = ifelse(site == "Montagne_tortue", "montagnetortue", site)) |>
   #mutate(site = tolower(site)) |>
@@ -309,6 +326,7 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 } else { # if no duplicated rows
   text <- ""
 }
+text
 ```
 
 `r text`
@@ -517,19 +535,7 @@ data_cor <- data_cor %>% filter(Diameter >= MinDBH & Diameter >= 10)
 
 `r text`
 
-## Clean species information
 
-
-```{r add-clean-taxonomy}
-data_species <- 
-  read.delim("data/derived_data/taxonomy_v3.1.tsv") |>
-  select(contains("cleaned") | contains("tax_id")) |>
-  distinct(tax_id, .keep_all = TRUE)  
-
-data_cor <- data_cor |>
-  left_join(data_species, by = "tax_id")
-
-```
 
 ### Level of taxonomic resolution
 
@@ -868,6 +874,7 @@ data_cor$diameter_cor <- data_cor$Diameter
 
 
 ```{r taper-correction}
+#| eval: false
 taper_function <- function(diam, hom) {
   # default hom (no correction) when there is no reliable information
   hom[is.na(hom) | hom <= 0 | hom > 20] <- 1.3
