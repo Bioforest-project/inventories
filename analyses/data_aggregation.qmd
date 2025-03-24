@@ -150,18 +150,11 @@ if (!file.exists("data/raw_data/bioforest-plot-information.csv")) {
   # TODO solve authentication error
 }
 plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
-  mutate(site = as.character(site)) |> 
+  mutate(site = as.character(site)) |>
   rename(site_raw = site) |>
-  left_join(sites) |> 
+  left_join(sites) |>
   select(-site_raw) |>
   subset(site %in% unique(data_cor$Site))
-
-  #mutate(site = ifelse(site == "BAFOG", "Bafog", site)) |>
-  #mutate(site = ifelse(site == "Montagne_tortue", "montagnetortue", site)) |>
-  #mutate(site = tolower(site)) |>
-  #mutate(site = gsub(pattern = " ", replacement = "", site)) |>
-  #mutate(site = gsub(pattern = "_", replacement = "", site)) |>
-  #subset(tolower(site) %in% tolower(unique(data_cor$Site)))
 ```
 
 ```{r add-missing-plot-coordinates}
@@ -194,7 +187,7 @@ plot_information <- plot_information |>
   ) |>
   ## remove plots that don't have coordinates and treatment information
   subset(!is.na(longitude)) |>
-  select(site, plot, longitude, latitude, logging, silv_treat, e)
+  select(site, plot, longitude, latitude, logging, silv_treat, e, Treatment)
 ```
 
 ```{r remove-plots-without-coords}
@@ -211,7 +204,8 @@ data_missing <- data_cor |>
 data_cor <- data_cor |>
   merge(plot_information,
     by.x = c("Site", "Plot"), by.y = c("site", "plot")
-  )
+  ) |>
+  mutate(Plot = paste(Site, Plot, Treatment, sep="-"))
 
 missing <- paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")
 
@@ -365,8 +359,7 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 } else {
   still_stem_dupli <- FALSE
 }
-  print(text)
-
+print(text)
 ```
 
 `r text`
@@ -818,7 +811,8 @@ if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
   text <- paste(
     "There was always only one scientific name for a given individual (or",
     "always a NA). No change has been made. The value is ScientificName_cor",
-    "is the same than in scientific_cleaned, and SpName_codecor is always 'no_cor'"
+    "is the same than in scientific_cleaned, and
+    SpName_codecor is always 'no_cor'"
   )
 } else { # if some correction have been made
   nb_filled <- data_cor %>%
@@ -1035,7 +1029,7 @@ if (sum(is.na(data_cor$Diameter)) > 0) {
   text <- "No missing DBH values were interpolated."
 }
 
-#print(text)
+print(text)
 ```
 
 `r text`
@@ -1046,39 +1040,35 @@ if (sum(is.na(data_cor$Diameter)) > 0) {
 
 ```{r}
 before_bug <- data_cor
-after_bug  <- before_bug |>
-    group_by(IdStem) |>
-    arrange(Year, .by_group = TRUE) |>
+after_bug <- before_bug |>
+  group_by(IdStem) |>
+  arrange(Year, .by_group = TRUE) |>
   mutate(
-    diam_growth = c(NA, diff(diameter_cor)) / c(NA, diff(Year)),  
-    diff_year = c(NA, diff(Year)),        
+    diam_growth = c(NA, diff(diameter_cor)) / c(NA, diff(Year)),
+    diff_year = c(NA, diff(Year)),
     flag_negative = ifelse(diam_growth < 0, TRUE, FALSE)
   ) |>
-  ungroup() 
-after_bug %>% 
-  group_by(IdStem) %>% 
-  summarise(n = sum(is.na(diam_growth))) %>% 
+  ungroup()
+after_bug %>%
+  group_by(IdStem) %>%
+  summarise(n = sum(is.na(diam_growth))) %>%
   arrange(desc(n))
-after_bug %>% 
-  filter(IdStem == "Paracou_10_1_120923_120923_1_auto") %>% 
+after_bug %>%
+  filter(IdStem == "Paracou_10_1_120923_120923_1_auto") %>%
   select(Year, diam_growth)
 ```
 
 
 ```{r estimate-dbh-growth}
 data_cor <- data_cor |>
-    group_by(IdStem) |>
-    arrange(Year, .by_group = TRUE) |>
+  group_by(IdStem) |>
+  arrange(Year, .by_group = TRUE) |>
   mutate(
-    diam_growth = c(NA, diff(diameter_cor)) / c(NA, diff(Year)),  
-    diff_year = c(NA, diff(Year)),        
+    diam_growth = c(NA, diff(diameter_cor)) / c(NA, diff(Year)),
+    diff_year = c(NA, diff(Year)),
     flag_negative = ifelse(diam_growth < 0, TRUE, FALSE)
   ) |>
-  ungroup() 
-
-    #mutate(
-  #diam_growth = c((diameter_cor[2] - diameter_cor[1]) / (Year[2] -   #Year[1]), diff(diameter_cor) / diff(Year)),
-  #diff_year = c(Year[2] - Year[1], diff(Year)))
+  ungroup()
 
 # TODO add dbh recruitment: standardize over previous census interval
 ```
@@ -1207,8 +1197,7 @@ data_cor <- data_cor |>
 # species
 neutral_div_sp <- data_cor %>%
   subset(!is.na(species_cleaned)) %>%
-  group_by(Site, Plot, Year,scientific_cleaned
-  ) %>%
+  group_by(Site, Plot, Year, scientific_cleaned) %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(Site, Plot, Year) %>%
   summarise(
@@ -1716,14 +1705,15 @@ data_cor <- read.delim("data/derived_data/traits_v3.tsv") |>
 p_na_wd <- round(sum(is.na(data_cor$WD)) / nrow(data_cor) * 100, 1)
 data_cor <- data_cor |>
   group_by(Site, Plot, Year) |>
-  mutate(WD = ifelse(is.na(WD), mean(WD, na.rm = TRUE), WD)) %>% 
+  mutate(WD = ifelse(is.na(WD), mean(WD, na.rm = TRUE), WD)) %>%
   group_by(Site, Year) |>
-  mutate(WD = ifelse(is.na(WD), mean(WD, na.rm = TRUE), WD)) %>% 
+  mutate(WD = ifelse(is.na(WD), mean(WD, na.rm = TRUE), WD)) %>%
   group_by(Site) |>
   mutate(WD = ifelse(is.na(WD), mean(WD, na.rm = TRUE), WD))
 
-if(any(is.na(data_cor$WD)))
+if (any(is.na(data_cor$WD))) {
   stop("NA in WD")
+}
 ```
 
 We used imputed specific wood density values; for individuals that were not identified to the species (`r p_na_wd`%), we use an average wood density value per plot and census year.
@@ -1739,8 +1729,9 @@ data_cor <- data_cor |>
     agb_growth = agb_func(diameter_cor - diam_growth + diam_growth_cor, WD, e) -
       agb_func(diameter_cor - diam_growth, WD, e)
   )
-if(any(is.na(data_cor$agb)))
+if (any(is.na(data_cor$agb))) {
   stop("NA in AGB values")
+}
 ```
 
 ```{r agb-stocks}
