@@ -47,9 +47,10 @@ if (length(data_list) == 0) {
   stop("Please check that the site name in params matches your data file name.")
 }
 
-# importing site names corrections table
+#importing site names corrections table
 sites <- read.csv("data/raw_data/site_name_correction.csv") |>
-  separate_rows(site_raw, sep = ",")
+  separate_rows(site_raw, sep = ",") |>
+  unique()
 
 # creating a taxonomic ID to use for joining wrong and corrected taxa
 read_harmonized <- function(file) {
@@ -108,7 +109,8 @@ data_cor <- data_raw
 ```{r merge-cleaned-taxonomy}
 data_species <-
   read_tsv("data/derived_data/taxonomy_v3.tsv") |>
-  select(contains("cleaned") | "tax_id" | "file")
+  select(contains("cleaned") | "tax_id" | "file") |>
+  unique()
 
 if (!all(unique(data_cor$file) %in% unique(data_species$file))) {
   stop("This file does not have clean taxonomy")
@@ -205,7 +207,8 @@ data_cor <- data_cor |>
   merge(plot_information,
     by.x = c("Site", "Plot"), by.y = c("site", "plot")
   ) |>
-  mutate(Plot = paste(Site, Plot, Treatment, sep="-"))
+  mutate(Plot = paste(Site, Plot, Treatment, 
+                      sep = "-"))
 
 missing <- paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")
 
