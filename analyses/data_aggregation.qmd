@@ -5,8 +5,7 @@ format:
     toc: true
     number-sections: true
     colorlinks: true
-params:
-  site: iwokrama
+ params: ecosilva
   taper: false
   plot_filter: false
   plot: "Manare_I"
@@ -48,51 +47,56 @@ if (length(data_list) == 0) {
   stop("Please check that the site name in params matches your data file name.")
 }
 
-#importing site names corrections table
-sites <- read.csv("data/raw_data/site_name_correction.csv") |> 
+# importing site names corrections table
+sites <- read.csv("data/raw_data/site_name_correction.csv") |>
   separate_rows(site_raw, sep = ",")
 
 # creating a taxonomic ID to use for joining wrong and corrected taxa
-read_harmonized <- function(file){
-  cols <- c(ScientificName = NA_character_,
-            VernName = NA_character_,
-            Family = NA_character_,
-            Genus = NA_character_,
-            Species = NA_character_)
-           read_csv(file,
-           locale = readr::locale(encoding = "latin1"),
-           col_types = cols()) %>%
-    add_column(!!!cols[!names(cols) %in% names(.)]) |>
-  mutate(tax_id = as.numeric(as.factor(paste(ScientificName,
-                                             VernName,
-                                             Family,
-                                             Genus,
-                                             Species)))) |>
-  mutate(file = gsub("data/raw_data/", "", file))
+read_harmonized <- function(file) {
+  cols <- c(
+    ScientificName = NA_character_,
+    VernName = NA_character_,
+    Family = NA_character_,
+    Genus = NA_character_,
+    Species = NA_character_
+  )
+  read_csv(file,
+    locale = readr::locale(encoding = "latin1"),
+    col_types = cols()
+  ) %>%
+    add_column(!!!cols[!names(cols) %in% names(.data)]) |>
+    mutate(tax_id = as.numeric(as.factor(paste(
+      .data$ScientificName,
+      .data$VernName,
+      .data$Family,
+      .data$Genus,
+      .data$Species
+    )))) |>
+    mutate(file = gsub("data/raw_data/", "", file))
 }
 
 # extracting data file and creating consistent site names
 data_raw <-
   data_list |>
-  #rbindlist(fill = TRUE, use.names = TRUE) |>
+  # rbindlist(fill = TRUE, use.names = TRUE) |>
   lapply(read_harmonized) |>
   bind_rows() |>
-  mutate(Site = as.character(Site)) |> 
+  mutate(Site = as.character(Site)) |>
   rename(site_raw = Site) |>
-  left_join(sites) |> 
+  left_join(sites) |>
   select(-site_raw) |>
   rename(Site = site) |>
-  mutate(Plot = as.character(Plot)) 
+  mutate(Plot = as.character(Plot))
 
-if(params$plot_filter)
+if (params$plot_filter) {
   data_raw <- filter(data_raw, Plot == params$plot)
+}
 
-#as_tibble() |>
+# as_tibble() |>
 #  mutate(Site = tolower(Site)) |>
 #  mutate(Site = gsub(pattern = " ", replacement = "", Site)) |>
 #  mutate(Site = gsub(pattern = "_", replacement = "", Site)) |>
 #  mutate(Site = gsub(pattern = "sg", replacement = "sungai", #Site))
-
 ```
 
 ```{r create-data-cor}
@@ -102,11 +106,11 @@ data_cor <- data_raw
 ## Clean species information
 
 ```{r merge-cleaned-taxonomy}
-data_species <- 
+data_species <-
   read_tsv("data/derived_data/taxonomy_v3.tsv") |>
-  select(contains("cleaned") | "tax_id" | "file") 
+  select(contains("cleaned") | "tax_id" | "file")
 
-if (!all(unique(data_cor$file) %in% unique(data_species$file))){
+if (!all(unique(data_cor$file) %in% unique(data_species$file))) {
   stop("This file does not have clean taxonomy")
 }
 
