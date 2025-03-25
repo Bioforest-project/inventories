@@ -5,7 +5,8 @@ format:
     toc: true
     number-sections: true
     colorlinks: true
- params: ecosilva
+params: 
+  site: montagnetortue
   taper: false
   plot_filter: false
   plot: "Manare_I"
@@ -47,7 +48,7 @@ if (length(data_list) == 0) {
   stop("Please check that the site name in params matches your data file name.")
 }
 
-#importing site names corrections table
+# importing site names corrections table
 sites <- read.csv("data/raw_data/site_name_correction.csv") |>
   separate_rows(site_raw, sep = ",") |>
   unique()
@@ -65,13 +66,13 @@ read_harmonized <- function(file) {
     locale = readr::locale(encoding = "latin1"),
     col_types = cols()
   ) %>%
-    add_column(!!!cols[!names(cols) %in% names(.data)]) |>
+    add_column(!!!cols[!names(cols) %in% names(.)]) |>
     mutate(tax_id = as.numeric(as.factor(paste(
-      .data$ScientificName,
-      .data$VernName,
-      .data$Family,
-      .data$Genus,
-      .data$Species
+      ScientificName,
+      VernName,
+      Family,
+      Genus,
+      Species
     )))) |>
     mutate(file = gsub("data/raw_data/", "", file))
 }
@@ -207,8 +208,9 @@ data_cor <- data_cor |>
   merge(plot_information,
     by.x = c("Site", "Plot"), by.y = c("site", "plot")
   ) |>
-  mutate(Plot = paste(Site, Plot, Treatment, 
-                      sep = "-"))
+  mutate(Plot = paste(Site, Plot, Treatment,
+    sep = "-"
+  ))
 
 missing <- paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")
 
@@ -244,8 +246,13 @@ The following table shows the number of censuses per plots.
 ```{r show-census-count}
 data_cor %>%
   group_by(Site, Plot) %>%
-  summarise(number_of_censuses = length(unique(IdCensus))) %>%
+  summarise(number_of_censuses = length(unique(IdCensus)),
+            first_census = min(Year),
+            last_census = max(Year),
+            num_individuals = n_distinct(IdStem)) %>%
   knitr::kable()
+
+print(summary_data)
 ```
 
 Censuses were conducted between `r min(data_cor$Year)` and `r max(data_cor$Year)`.
@@ -862,7 +869,8 @@ print(text)
 
 ### Only one set of coordinates per tree and no missing coordinates
 
-<!-- Which coordinates do we take ? check if there are dataset with no absolute coordinate-->
+<!-- Which coordinates do we take ? check if there are dataset with no absolute 
+coordinate-->
 
 ### All trees within the plot
 
@@ -875,6 +883,80 @@ print(text)
 -   number of species
 
 -   maps per plot and per census
+
+We will now visualize the data to ensure there are no obvious outliers or unexpected trends
+
+```{r stem-abundance-visual}
+
+# Stem abundance by plot and census year
+
+stem_abundance <- data_cor %>%
+  group_by(Plot, Year) %>%
+  summarise(stem_count = n(), .groups = "drop")
+
+ggplot(stem_abundance, aes(x = Year, y = stem_count, color = as.factor(Plot))) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Stem Abundance by Plot and Census Year",
+       x = "Census Year",
+       y = "Number of Stems",
+       fill = "Plot") +
+  theme_minimal()
+
+```
+
+```{R dbh-visual}
+
+# Mean DBH by Plot and Census Year
+dbh_stats <- data_cor %>%
+  group_by(Plot, Year) %>%
+  summarise(mean_dbh = mean(Diameter, na.rm = TRUE),
+            .groups = "drop")
+
+ggplot(dbh_stats, aes(x = Year, y = mean_dbh, color = as.factor(Plot))) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Mean DBH by Plot and Census Year",
+       x = "Census Year",
+       y = "Mean DBH (cm)",
+       color = "Plot") +
+  theme_minimal()
+
+```
+
+
+```{r species-visual}
+
+# Number of Species by Plot and Census Year
+
+species_count <- data_cor %>%
+  group_by(Plot, Year) %>%
+  summarise(num_species = n_distinct(scientific_cleaned), .groups = "drop")
+
+ggplot(species_count, aes(x = Year, y = num_species, colour = as.factor(Plot))) +
+  geom_line() +
+  geom_point() +
+  #geom_col(position = "dodge") +
+  labs(title = "Number of Species by Plot and Census Year",
+       x = "Census Year",
+       y = "Species Count",
+       fill = "Plot") +
+  theme_minimal()
+
+```
+
+```{r maps-visual}
+
+# Maps per plot and per census
+ggplot(data_cor, aes(x = longitude, y = latitude, color = as.factor(Plot))) +
+  geom_point(alpha = 0.6) +
+  facet_wrap(~ Year) +
+  labs(title = "Map of Plots by Census Year",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Plot ID") +
+  theme_minimal()
+```
 
 # DBH corrections
 
