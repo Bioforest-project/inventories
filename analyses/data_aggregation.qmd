@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params: 
-  site: montagnetortue
+  site: misiones
   taper: false
   plot_filter: false
   plot: "Manare_I"
@@ -23,6 +23,7 @@ library(ggplot2)
 library(tidyverse)
 library(entropart)
 library(fundiversity)
+library(patchwork)
 ```
 
 # Introduction
@@ -93,12 +94,6 @@ data_raw <-
 if (params$plot_filter) {
   data_raw <- filter(data_raw, Plot == params$plot)
 }
-
-# as_tibble() |>
-#  mutate(Site = tolower(Site)) |>
-#  mutate(Site = gsub(pattern = " ", replacement = "", Site)) |>
-#  mutate(Site = gsub(pattern = "_", replacement = "", Site)) |>
-#  mutate(Site = gsub(pattern = "sg", replacement = "sungai", #Site))
 ```
 
 ```{r create-data-cor}
@@ -119,6 +114,7 @@ if (!all(unique(data_cor$file) %in% unique(data_species$file))) {
 
 data_cor <- data_cor |>
   left_join(data_species, by = c("tax_id", "file"))
+
 ```
 
 
@@ -251,13 +247,11 @@ data_cor %>%
             last_census = max(Year),
             num_individuals = n_distinct(IdStem)) %>%
   knitr::kable()
-
-print(summary_data)
 ```
 
 Censuses were conducted between `r min(data_cor$Year)` and `r max(data_cor$Year)`.
 
-*Please add a comment on question XXXX of the survey, if there are missing plots or censuses.*
+*Please let us know if there are missing plots or censuses.*
 
 # Check data consistency
 
@@ -315,7 +309,6 @@ if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
     " stems.",
     sep = ""
   )
-  print(text)
 }
 ```
 
@@ -341,7 +334,6 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 } else { # if no duplicated rows
   text <- ""
 }
-text
 ```
 
 `r text`
@@ -369,7 +361,6 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 } else {
   still_stem_dupli <- FALSE
 }
-print(text)
 ```
 
 `r text`
@@ -579,8 +570,6 @@ if (anyNA(data_cor$scientific_cleaned)) {
 } else {
   text <- "There are no unidentified trees."
 }
-
-print(text)
 ```
 
 `r text`
@@ -636,8 +625,6 @@ if ("LifeStatus" %in% colnames(data_cor)) {
     "if we should have used another column."
   )
 }
-
-print(text)
 ```
 
 `r text`
@@ -861,8 +848,6 @@ if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
   }
   text <- paste(text1, "\n", text2)
 }
-
-print(text)
 ```
 
 `r text`
@@ -875,14 +860,6 @@ coordinate-->
 ### All trees within the plot
 
 # First step of data visualization
-
--   stem abundance by plot and census year
-
--   mean (or median) dbh by plot and census year
-
--   number of species
-
--   maps per plot and per census
 
 We will now visualize the data to ensure there are no obvious outliers or unexpected trends
 
@@ -911,17 +888,52 @@ ggplot(stem_abundance, aes(x = Year, y = stem_count, color = as.factor(Plot))) +
 dbh_stats <- data_cor %>%
   group_by(Plot, Year) %>%
   summarise(mean_dbh = mean(Diameter, na.rm = TRUE),
+            median_dbh = median(Diameter, na.rm = TRUE),
+            min_dbh = min(Diameter, na.rm = TRUE),
+            max_dbh = max(Diameter, na.rm = TRUE),
             .groups = "drop")
 
-ggplot(dbh_stats, aes(x = Year, y = mean_dbh, color = as.factor(Plot))) +
-  geom_line() +
-  geom_point() +
+mean <- ggplot(dbh_stats, aes(x = Year, y = mean_dbh, 
+                              color = as.factor(Plot))) +
+  geom_line(show.legend = FALSE) +
+  geom_point(show.legend = FALSE) +
   labs(title = "Mean DBH by Plot and Census Year",
        x = "Census Year",
        y = "Mean DBH (cm)",
        color = "Plot") +
   theme_minimal()
 
+median <- ggplot(dbh_stats, aes(x = Year, y = median_dbh, 
+                              color = as.factor(Plot))) +
+  geom_line(show.legend = FALSE) +
+  geom_point(show.legend = FALSE) +
+  labs(title = "Median DBH by Plot and Census Year",
+       x = "Census Year",
+       y = "Median DBH (cm)",
+       color = "Plot") +
+  theme_minimal()
+
+min <- ggplot(dbh_stats, aes(x = Year, y = min_dbh, 
+                              color = as.factor(Plot))) +
+  geom_line(show.legend = FALSE) +
+  geom_point(show.legend = FALSE) +
+  labs(title = "Minimum DBH by Plot and Census Year",
+       x = "Census Year",
+       y = "Minimum DBH (cm)",
+       color = "Plot") +
+  theme_minimal()
+
+max <- ggplot(dbh_stats, aes(x = Year, y = max_dbh, 
+                              color = as.factor(Plot))) +
+  geom_line(show.legend = FALSE) +
+  geom_point(show.legend = FALSE) +
+  labs(title = "Maximum DBH by Plot and Census Year",
+       x = "Census Year",
+       y = "Maximum DBH (cm)",
+       color = "Plot") +
+  theme_minimal()
+
+(min | max) / (mean | median)
 ```
 
 
@@ -933,7 +945,8 @@ species_count <- data_cor %>%
   group_by(Plot, Year) %>%
   summarise(num_species = n_distinct(scientific_cleaned), .groups = "drop")
 
-ggplot(species_count, aes(x = Year, y = num_species, colour = as.factor(Plot))) +
+ggplot(species_count, aes(x = Year, y = num_species, 
+                          colour = as.factor(Plot))) + 
   geom_line() +
   geom_point() +
   #geom_col(position = "dodge") +
@@ -945,17 +958,53 @@ ggplot(species_count, aes(x = Year, y = num_species, colour = as.factor(Plot))) 
 
 ```
 
+
+```{r genus-visual}
+
+# Number of Species by Plot and Census Year
+
+genus_count <- data_cor %>%
+  group_by(Plot, Year) %>%
+  summarise(num_genus = n_distinct(genus_cleaned), .groups = "drop")
+
+
+ggplot(genus_count, aes(x = Year, y = num_genus, 
+                          colour = as.factor(Plot))) + 
+  geom_line() +
+  geom_point() +
+  #geom_col(position = "dodge") +
+  labs(title = "Number of Genus by Plot and Census Year",
+       x = "Census Year",
+       y = "Genus Count",
+       fill = "Plot") +
+  theme_minimal()
+
+```
+
+
 ```{r maps-visual}
 
 # Maps per plot and per census
-ggplot(data_cor, aes(x = longitude, y = latitude, color = as.factor(Plot))) +
-  geom_point(alpha = 0.6) +
-  facet_wrap(~ Year) +
+map <- ggplot(data_cor, aes(x = longitude, y = latitude, color = as.factor(Plot))) +
+  geom_point(alpha = 0.6, show.legend = FALSE) +
+  #facet_wrap(~ Year) +
   labs(title = "Map of Plots by Census Year",
        x = "Longitude",
        y = "Latitude",
        color = "Plot ID") +
   theme_minimal()
+
+plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
+  geom_point(alpha = 0.6, show.legend = FALSE) +
+  #facet_wrap(~ Year) +
+  labs(title = "Plots censused across years",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Plot ID") +
+  theme_minimal()
+
+(map / plots)
+
 ```
 
 # DBH corrections
