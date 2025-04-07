@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params: 
-  site: misiones
+  site: ecosilva
   taper: false
   plot_filter: false
   plot: "Manare_I"
@@ -15,8 +15,11 @@ execute:
   echo: false      
 ---
 
+
 ```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file(),
+                      warning = FALSE, message = FALSE,  results = "hide") 
+
 library(data.table)
 library(BIOMASS)
 library(ggplot2)
@@ -42,7 +45,9 @@ You should have already:
 
 -   added plot-level information to this [document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link).
 
-```{r load-data}
+-   made sure all input files are in the same folder
+
+```{r load-data, echo=FALSE}
 # automate compilation for all sites with qmd params
 data_list <- list.files("data/raw_data/", params$site, full.names = TRUE)
 if (length(data_list) == 0) {
@@ -100,8 +105,6 @@ if (params$plot_filter) {
 data_cor <- data_raw
 ```
 
-## Clean species information
-
 ```{r merge-cleaned-taxonomy}
 data_species <-
   read_tsv("data/derived_data/taxonomy_v3.tsv") |>
@@ -116,7 +119,6 @@ data_cor <- data_cor |>
   left_join(data_species, by = c("tax_id", "file"))
 
 ```
-
 
 ```{r remove-values}
 # some values (partial censuses, etc) need to be removed in some sites
@@ -223,7 +225,6 @@ if (nrow(data_cor) == 0) {
     "Please check the information (coordinates and treatment) ",
     "on the online document: https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link" # nolint
   ))
-  print(text)
 }
 ```
 
@@ -237,7 +238,7 @@ This document presents the data aggregation for the `r paste(unique(data_cor$Sit
 
 It has `r dim(data_cor)[1]` observations, belonging to `r length(unique(data_cor$IdStem))` stems.
 
-The following table shows the number of censuses per plots.
+The following table shows the number of censuses per plots, the first and last year of census, and the number of individuals measured in each census.
 
 ```{r show-census-count}
 data_cor %>%
@@ -456,7 +457,7 @@ data_cor <- data_cor |>
   subset(Diameter > 0 & !is.na(Diameter))
 ```
 
-### All trees above the DBH cutoff
+### All trees are above the DBH cutoff
 
 ```{r get-dbh-cutoff}
 #| message: false
@@ -541,8 +542,6 @@ data_cor <- data_cor %>% filter(Diameter >= MinDBH & Diameter >= 10)
 ```
 
 `r text`
-
-
 
 ### Level of taxonomic resolution
 
@@ -854,33 +853,18 @@ if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
 
 ### Only one set of coordinates per tree and no missing coordinates
 
+```{=html}
 <!-- Which coordinates do we take ? check if there are dataset with no absolute 
 coordinate-->
+```
 
 ### All trees within the plot
 
-# First step of data visualization
+# Data visualization
 
 We will now visualize the data to ensure there are no obvious outliers or unexpected trends
 
-```{r stem-abundance-visual}
-
-# Stem abundance by plot and census year
-
-stem_abundance <- data_cor %>%
-  group_by(Plot, Year) %>%
-  summarise(stem_count = n(), .groups = "drop")
-
-ggplot(stem_abundance, aes(x = Year, y = stem_count, color = as.factor(Plot))) +
-  geom_line() +
-  geom_point() +
-  labs(title = "Stem Abundance by Plot and Census Year",
-       x = "Census Year",
-       y = "Number of Stems",
-       fill = "Plot") +
-  theme_minimal()
-
-```
+## DBH across plots and censuses
 
 ```{R dbh-visual}
 
@@ -897,7 +881,7 @@ mean <- ggplot(dbh_stats, aes(x = Year, y = mean_dbh,
                               color = as.factor(Plot))) +
   geom_line(show.legend = FALSE) +
   geom_point(show.legend = FALSE) +
-  labs(title = "Mean DBH by Plot and Census Year",
+  labs(title = "Mean DBH",
        x = "Census Year",
        y = "Mean DBH (cm)",
        color = "Plot") +
@@ -907,7 +891,7 @@ median <- ggplot(dbh_stats, aes(x = Year, y = median_dbh,
                               color = as.factor(Plot))) +
   geom_line(show.legend = FALSE) +
   geom_point(show.legend = FALSE) +
-  labs(title = "Median DBH by Plot and Census Year",
+  labs(title = "Median DBH",
        x = "Census Year",
        y = "Median DBH (cm)",
        color = "Plot") +
@@ -917,7 +901,7 @@ min <- ggplot(dbh_stats, aes(x = Year, y = min_dbh,
                               color = as.factor(Plot))) +
   geom_line(show.legend = FALSE) +
   geom_point(show.legend = FALSE) +
-  labs(title = "Minimum DBH by Plot and Census Year",
+  labs(title = "Minimum DBH",
        x = "Census Year",
        y = "Minimum DBH (cm)",
        color = "Plot") +
@@ -927,7 +911,7 @@ max <- ggplot(dbh_stats, aes(x = Year, y = max_dbh,
                               color = as.factor(Plot))) +
   geom_line(show.legend = FALSE) +
   geom_point(show.legend = FALSE) +
-  labs(title = "Maximum DBH by Plot and Census Year",
+  labs(title = "Maximum DBH",
        x = "Census Year",
        y = "Maximum DBH (cm)",
        color = "Plot") +
@@ -936,6 +920,7 @@ max <- ggplot(dbh_stats, aes(x = Year, y = max_dbh,
 (min | max) / (mean | median)
 ```
 
+## Number of species and genus across plots and censuses
 
 ```{r species-visual}
 
@@ -958,10 +943,9 @@ ggplot(species_count, aes(x = Year, y = num_species,
 
 ```
 
-
 ```{r genus-visual}
 
-# Number of Species by Plot and Census Year
+# Number of genus by Plot and Census Year
 
 genus_count <- data_cor %>%
   group_by(Plot, Year) %>%
@@ -981,6 +965,7 @@ ggplot(genus_count, aes(x = Year, y = num_genus,
 
 ```
 
+## Visualizing plots and censuses
 
 ```{r maps-visual}
 
@@ -1005,6 +990,8 @@ plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
 
 (map / plots)
 
+
+
 ```
 
 # DBH corrections
@@ -1018,7 +1005,6 @@ data_cor$diameter_cor <- data_cor$Diameter
 ```
 
 ## Taper correction
-
 
 ```{r taper-correction}
 #| eval: false
@@ -1191,7 +1177,6 @@ after_bug %>%
   filter(IdStem == "Paracou_10_1_120923_120923_1_auto") %>%
   select(Year, diam_growth)
 ```
-
 
 ```{r estimate-dbh-growth}
 data_cor <- data_cor |>
