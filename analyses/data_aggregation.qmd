@@ -934,9 +934,9 @@ plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
 
 # DBH corrections
 
-![Flowchart of DBH corrections](flowchart_dbh_correction.png)
+The following flowchart summarises the corrections applied to DBH and DBH changes. The steps (yellow rectangles) are explained and illustrated in each subsection.
 
-We keep the original `Diameter` column and add a `diameter_cor` column where we implement diameter corrections.
+![Flowchart of DBH corrections](flowchart_dbh_correction.png)
 
 ```{r create-diameter_cor}
 data_cor$diameter_cor <- data_cor$Diameter
@@ -944,8 +944,9 @@ data_cor$diameter_cor <- data_cor$Diameter
 
 ## Taper correction
 
+Trees measured above the standard height of 1.3 m (e.g. if they have irregular trunks at 1.3 m due to buttresses) will have a smaller diameter measured than their actual DBH due to trunk taper. To correct for this systematic bias, taper corrections have been developed to estimate DBH based on the measured diameter and the height at which it was measured. 
+
 ```{r taper-correction}
-#| eval: false
 taper_function <- function(diam, hom) {
   # default hom (no correction) when there is no reliable information
   hom[is.na(hom) | hom <= 0 | hom > 20] <- 1.3
@@ -996,18 +997,18 @@ if (params$taper) {
   }
 } else {
   text <- paste(
-    "We did not correct trees measured above 1.3 m for taper."
+    "After testing various taper correction equations (Cushman et al. 2014, 2021), we found that these equations over-corrected the data at most sites and introduced a new bias. Until we find a taper correction that's better suited to Bioforest sites, we decided not to correct for taper."
   )
 }
 ```
 
 `r text`
 
-## Interpolating missing measurements
+## Interpolation of missing measurements
 
 If trees are missed in a census and remeasured in a later census, we use the DBH values from the previous and next census to interpolate the missing DBH value(s).
 
-This may lead to bias in the first and last censuses, where missed DBHs cannot be detected. We need to check that recruitment and mortality rates are not systematically lower in these two censuses.
+This can lead to bias in the first and last censuses where missing DBH cannot be detected. We need to check that recruitment and mortality rates are not systematically lower in these two censuses.
 
 ```{r interpolate-missing-dbh}
 interpolate <- function(diam, years) {
@@ -1067,34 +1068,42 @@ data_cor <- bind_rows(
 rm(missing_censuses)
 
 if (sum(is.na(data_cor$Diameter)) > 0) {
+  n_missing <- sum(is.na(data_cor$Diameter))
+  stem_missing <- length(unique(data_cor$IdStem[is.na(data_cor$Diameter)]))
   text <- paste(
-    sum(is.na(data_cor$Diameter)),
-    "missing DBH values were interpolated."
+    "We found a total of", sum(is.na(data_cor$Diameter)),
+    "missing DBH values, in", stem_missing, "stems.", 
+    "The figure below shows a subset of", min(stem_missing, 12), 
+    "trees with missing DBH (red points are interpolated DBH)."
   )
-  illustration <- sample(
-    subset(data_cor, is.na(Diameter))$IdStem,
-    min(sum(is.na(data_cor$Diameter)), 12)
-  )
-  subset(data_cor, IdStem %in% illustration) |>
-    ggplot(aes(x = Year, y = diameter_cor)) +
-    geom_point(aes(col = is.na(Diameter))) +
-    labs(x = "Census year", y = "Diameter (cm)", col = "Interpolated") +
-    scale_color_manual(values = c("black", "red")) +
-    facet_wrap(~IdStem, scales = "free") +
-    theme_classic() +
-    theme(legend.position = "bottom")
 } else {
   text <- "No missing DBH values were interpolated."
 }
-
-print(text)
 ```
 
 `r text`
 
-## Correct DBH changes
+```{r fig-interpolate, fig.height=7, fig.width=11}
+if (sum(is.na(data_cor$Diameter)) > 0) {
+  illustration <- sample(
+    subset(data_cor, is.na(Diameter))$IdStem,
+    min(stem_missing, 12)
+  )
+  subset(data_cor, IdStem %in% illustration) |>
+    separate(Plot, c(NA, "plot_label", NA), sep = "-", remove = FALSE) |> 
+    mutate(label = paste0("Plot: ", plot_label, "_", Subplot, 
+           ", treeID: ", IdTreeOriginal, "\n Species: ", scientific_cleaned)) |> 
+    ggplot(aes(x = Year, y = diameter_cor)) +
+    geom_point(aes(col = is.na(Diameter))) +
+    labs(x = "Census year", y = "Diameter (cm)", col = "Interpolated") +
+    scale_color_manual(values = c("black", "red")) +
+    facet_wrap(~label, scales = "free") +
+    theme_classic() +
+    theme(legend.position = "bottom")
+}
+```
 
-### Estimate DBH growth
+## Substitute excessive DBH changes
 
 ```{r}
 before_bug <- data_cor
