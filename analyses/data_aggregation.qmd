@@ -72,16 +72,14 @@ read_harmonized <- function(file) {
     locale = readr::locale(encoding = "latin1"),
     col_types = cols()
   ) %>%
-    add_column(!!!cols[!names(cols) %in% names(.)]) |>
-    mutate(tax_id = as.numeric(as.factor(paste(
-      ScientificName,
-      VernName,
-      Family,
-      Genus,
-      Species
-    )))) |>
-    mutate(file = gsub("data/raw_data/", "", file))
+    add_column(!!!cols[!names(cols) %in% names(.)]) %>%
+    mutate(raw_taxonomy = paste(
+      ScientificName, "-", VernName, "-",
+      Family, Genus, Species)) %>% 
+    mutate(file = gsub("../inventories/data/raw_data/", "", file))
 }
+
+
 
 # extracting data file and creating consistent site names
 data_raw <-
@@ -107,16 +105,16 @@ data_cor <- data_raw
 
 ```{r merge-cleaned-taxonomy}
 data_species <-
-  read_tsv("data/derived_data/taxonomy_v3.tsv") |>
-  select(contains("cleaned") | "tax_id" | "file") |>
+  read_tsv("data/derived_data/taxonomy_v4.tsv") |>
+  #select(contains("cleaned") | "tax_id" | "file") |>
   unique()
 
-if (!all(unique(data_cor$file) %in% unique(data_species$file))) {
-  stop("This file does not have clean taxonomy")
-}
+#if (!all(unique(data_cor$raw_taxonomy) %in% unique(data_species$raw_taxonomy))) {
+#  stop("This file does not have clean taxonomy")
+#}
 
 data_cor <- data_cor |>
-  left_join(data_species, by = c("tax_id", "file"))
+  left_join(data_species, by = c("raw_taxonomy"))
 
 ```
 
@@ -178,7 +176,7 @@ plot_information <- plot_information |>
 
 ```{r harmonize-treatment-info}
 # harmonize treatment information as logging and silvicultural treatments (T/F)
-control_string <- "unlogged|to be logged|old-growth|control|natural"
+control_string <- "control"
 silv_string <- "treatment|devital|thinning"
 plot_information <- plot_information |>
   mutate(
@@ -247,7 +245,9 @@ data_cor %>%
             first_census = min(Year),
             last_census = max(Year),
             num_individuals = n_distinct(IdStem)) %>%
-  knitr::kable()
+  knitr::kable(col.names = c("Site", "Plot", "Number of censuses", 
+                             "First census", "Last census", 
+                             "Number of individuals"))
 ```
 
 Censuses were conducted between `r min(data_cor$Year)` and `r max(data_cor$Year)`.
@@ -268,24 +268,6 @@ data_cor <- data_cor |>
 ```
 
 We then check that there are no duplicated measurements for the same stem ID in a given census.
-
-```{r check-duplicated-stems}
-#| eval: false
-
-# Make a dummy data set to test
-dupl <- slice_sample(data_cor, n = 15) # some duplicated
-dupl <- dupl %>%
-  mutate(Diameter = replace(
-    Diameter, IdStem == dupl$IdStem[1],
-    dupl$Diameter[1] + 10
-  )) # one duplicated with different DBH
-data_cor <- rbind(data_cor, dupl)
-data_cor <- rbind(data_cor, slice_sample(dupl, n = 3)) # some duplicated twice
-dupl_sev_census <- data_cor %>%
-  filter(IdStem == dupl$IdStem[2]) %>%
-  slice_sample(, n = 2) # one IDstem with several duplicated censuses
-data_cor <- rbind(data_cor, dupl_sev_census)
-```
 
 ```{r print-duplicated-stems}
 nb_stem_plot <- data_cor %>%
@@ -391,7 +373,7 @@ if (still_stem_dupli == TRUE) {
 
 `r text`
 
-### Are there multi-stemmed trees?
+## Are there multi-stemmed trees?
 
 ```{r check-multi-stems}
 #| message: false
@@ -400,13 +382,20 @@ data_nstem <- data_cor |>
   group_by(Site, Plot, Subplot, IdTree) |>
   summarise(nstem = length(unique(IdStem)))
 if (all(data_nstem$nstem == 1)) {
-  print(paste(
+  text <- paste(
     "The number of stem identifiers and the number of tree identifiers are",
     "equal, suggesting either that there are no multi-stemmed trees, or",
     "that the multiple stems are considered as different individuals."
-  ))
+  )
 } else {
-  print("The following trees have multiple stems:")
+  text <- "The following trees have multiple stems:"
+}
+```
+
+`r text`
+
+```{r}
+if (any(data_nstem$nstem != 1)) {
   data_nstem |>
     subset(nstem > 1) |>
     knitr::kable()
@@ -666,59 +655,6 @@ This step adds two columns to the dataset:
 
 > To discuss : it would be worth gapfilling the scientific name when some obs are indet. as well, But I don't know if the Inded are always coded the same, and how...
 
-```{r dummy-sp-dupl}
-#| eval: false
-
-# create a dummy dataset to test (works for Mbaiki but probably not for all)
-set.seed(55)
-# add a different species names for one census
-# of a tree with NA in ScientificName
-sample_temp <- data_cor %>%
-  filter(is.na(ScientificName)) %>%
-  slice_sample(, n = 1) %>%
-  select(IdCensus, IdStem)
-data_cor <- data_cor %>%
-  mutate(ScientificName = replace(ScientificName,
-    (IdCensus == sample_temp$IdCensus & IdStem == sample_temp$IdStem),
-    values = "Bla blabbla"
-  ))
-# add a different species names for one census
-# of a tree with not an NA in ScientificName
-sample_temp2 <- data_cor %>%
-  filter(!(is.na(ScientificName))) %>%
-  slice_sample(, n = 1) %>%
-  select(IdCensus, IdStem)
-data_cor <- data_cor %>%
-  mutate(ScientificName = replace(ScientificName,
-    (IdCensus == sample_temp2$IdCensus & IdStem == sample_temp2$IdStem),
-    values = "Bli blibbli"
-  ))
-# add two differents species names for a tree that
-# is not NA (so will have 3 species names in total)
-sampleInd <- data_cor %>% # nolint
-  filter(!(is.na(ScientificName))) %>%
-  select(IdTree) %>%
-  sample_n(, size = 1) %>%
-  as.numeric()
-sampleCens <- data_cor %>% # nolint
-  filter(IdTree == sampleInd) %>%
-  select(IdCensus) %>%
-  sample_n(, size = 2) %>%
-  as.vector()
-data_cor <- data_cor %>%
-  mutate(ScientificName = replace(
-    ScientificName,
-    (IdCensus == sampleCens$IdCensus[1] & IdTree == sampleInd),
-    values = "Blu blubblu"
-  ))
-data_cor <- data_cor %>%
-  mutate(ScientificName = replace(
-    ScientificName,
-    (IdCensus == sampleCens$IdCensus[2] & IdTree == sampleInd),
-    values = "Blo blobblo"
-  ))
-# data_cor %>% filter(ScientificName %in% c("Bla blabbla", "Bli blibbli", "Blu blubblu", "Blo blobblo")) %>%  select(IdTree) # nolint
-```
 
 ```{r one-sp-per-tree}
 nb_sp_tree <- data_cor %>%
@@ -1446,7 +1382,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v3.tsv"),
+    read.delim("data/derived_data/traits_v4.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_ba")) |>
@@ -1459,7 +1395,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v3.tsv"),
+    read.delim("data/derived_data/traits_v4.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_n")) |>
@@ -1498,7 +1434,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v3.tsv"),
+    read.delim("data/derived_data/traits_v4.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwv_n")) |>
@@ -1534,7 +1470,7 @@ data_aggr |>
 
 ```{r functional-div}
 traits_used <- c("WD", "SLA", "LA", "N")
-matrix_trait <- read.delim("data/derived_data/traits_v3.tsv") |>
+matrix_trait <- read.delim("data/derived_data/traits_v4.tsv") |>
   subset(scientific_cleaned %in% data_cor$scientific_cleaned) |>
   subset(trait %in% traits_used) |>
   mutate(log_trait_value_imputed = log(trait_value_imputed)) |>
@@ -1627,7 +1563,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v3.tsv"),
+    read.delim("data/derived_data/traits_v4.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0("p_imputed_", trait)) |>
@@ -1847,7 +1783,7 @@ We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground bi
 
 ```{r add-wd}
 # add wood density
-data_cor <- read.delim("data/derived_data/traits_v3.tsv") |>
+data_cor <- read.delim("data/derived_data/traits_v4.tsv") |>
   subset(trait == "WD") |>
   pivot_wider(
     id_cols = "scientific_cleaned",
@@ -1957,8 +1893,6 @@ data_aggr |>
   facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
 
-# Save aggregated data
-
 ```{r save-aggregated-data}
 data_aggr |>
   write.csv(paste0(
@@ -1968,9 +1902,8 @@ data_aggr |>
   ), row.names = FALSE)
 ```
 
-# Save plot area information
 
-```{rsave-plot-area}
+```{r save-plot-area}
 data_cor |>
   select(Site, Plot, PlotArea) |>
   unique() |>
