@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params: 
-  site: tapajos-km114
+  site: tene
   taper: false
   plot_filter: false
   plot: "Manare_I"
@@ -47,6 +47,8 @@ You should have already:
 -   made sure all input files are in the same folder
 
 ```{r load-data, echo=FALSE}
+#| message: false
+#| warning: false
 # automate compilation for all sites with qmd params
 data_list <- list.files("data/raw_data/", params$site, full.names = TRUE)
 if (length(data_list) == 0) {
@@ -99,10 +101,14 @@ if (params$plot_filter) {
 ```
 
 ```{r create-data-cor}
+#| message: false
+#| warning: false
 data_cor <- data_raw
 ```
 
 ```{r merge-cleaned-taxonomy}
+#| message: false
+#| warning: false
 data_species <-
   read_tsv("data/derived_data/taxonomy_v4.tsv") |>
   #select(contains("cleaned") | "tax_id" | "file") |>
@@ -118,6 +124,8 @@ data_cor <- data_cor |>
 ```
 
 ```{r remove-values}
+#| message: false
+#| warning: false
 # some values (partial censuses, etc) need to be removed in some sites
 text <- ""
 if (any(data_raw$Site == "Paracou")) {
@@ -136,6 +144,8 @@ if (any(data_raw$Site == "Paracou")) {
 `r text`
 
 ```{r add-plot-level-data}
+#| message: false
+#| warning: false
 # download from google drive
 if (!file.exists("data/raw_data/bioforest-plot-information.csv")) {
   googledrive::drive_get(
@@ -156,6 +166,8 @@ plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
 ```
 
 ```{r add-missing-plot-coordinates}
+#| message: false
+#| warning: false
 # temporarily add plot information when missing online
 plot_information <- plot_information |>
   # temporary: some plots in MBaiki have the switched coordinates
@@ -168,12 +180,16 @@ plot_information <- plot_information |>
 ```
 
 ```{r add-e-var}
+#| message: false
+#| warning: false
 # add E variable for AGB allometry (from Chave et al 2014)
 plot_information <- plot_information |>
   mutate(e = computeE(cbind(longitude_cor, latitude_cor)))
 ```
 
 ```{r harmonize-treatment-info}
+#| message: false
+#| warning: false
 # harmonize treatment information as logging and silvicultural treatments (T/F)
 control_string <- "control"
 silv_string <- "treatment|devital|thinning"
@@ -189,6 +205,8 @@ plot_information <- plot_information |>
 ```
 
 ```{r remove-plots-without-coords}
+#| message: false
+#| warning: false
 # plots that are not on the online document
 data_missing <- data_cor |>
   mutate(site = Site, plot = Plot) |>
@@ -238,6 +256,8 @@ It has `r dim(data_cor)[1]` observations, belonging to `r length(unique(data_cor
 The following table shows the number of censuses per plots, the first and last year of census, and the number of individuals measured in each census.
 
 ```{r show-census-count}
+#| message: false
+#| warning: false
 data_cor %>%
   group_by(Site, Plot) %>%
   summarise(number_of_censuses = length(unique(IdCensus)),
@@ -262,6 +282,8 @@ This step checks for the absence of "anomalies" in the data.
 We paste the name of the site, plot, subplot and tag/ID of the tree and stem to create a new unique identifier for each stem.
 
 ```{r complete-idstem}
+#| message: false
+#| warning: false
 data_cor <- data_cor |>
   mutate(IdStem = paste(Site, Plot, Subplot, IdTree, IdStem, sep = "_"))
 ```
@@ -269,6 +291,8 @@ data_cor <- data_cor |>
 We then check that there are no duplicated measurements for the same stem ID in a given census.
 
 ```{r print-duplicated-stems}
+#| message: false
+#| warning: false
 nb_stem_plot <- data_cor %>%
   count(IdStem, IdCensus)
 
@@ -297,6 +321,8 @@ if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
 `r text`
 
 ```{r rmv-full-duplicated-stems}
+#| message: false
+#| warning: false
 if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
   prev_nb_obs <- dim(data_cor)[1]
   data_cor <- data_cor %>% distinct() # remove fully duplicated rows
@@ -321,6 +347,8 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 `r text`
 
 ```{r remaining-duplicated-stems}
+#| message: false
+#| warning: false
 if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
   if (all(
     length(unique(nb_stem_plot_bis$n)) == 1,
@@ -348,6 +376,8 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 `r text`
 
 ```{r print-remaining-duplicated-stems}
+#| message: false
+#| warning: false
 if (still_stem_dupli == TRUE) {
   if (nrow(stem_dupli_bis) > 10) {
     text <- paste(
@@ -366,6 +396,8 @@ if (still_stem_dupli == TRUE) {
 `r text`
 
 ```{r warn-remaining-duplicated-stems}
+#| message: false
+#| warning: false
 if (still_stem_dupli == TRUE) {
   text <- paste(
     "IMPORTANT: Please check these cases in your raw data before starting the",
@@ -404,6 +436,8 @@ if (all(data_nstem$nstem == 1)) {
 `r text`
 
 ```{r}
+#| message: false
+#| warning: false
 if (any(data_nstem$nstem != 1)) {
   multi_stemmed <- subset(data_nstem, nstem > 1)
 
@@ -426,6 +460,8 @@ if (any(data_nstem$nstem != 1)) {
 ### Remove missing (NA) DBH values
 
 ```{r check-na-dbh}
+#| message: false
+#| warning: false
 if (anyNA(data_cor$Diameter)) {
   nb_na_dbh <- sum(is.na(data_cor$Diameter))
   perc_na_dbh <- round(
@@ -449,6 +485,8 @@ if (anyNA(data_cor$Diameter)) {
 `r text`
 
 ```{r print-na-dbh}
+#| message: false
+#| warning: false
 if (anyNA(data_cor$Diameter)) {
   data_cor %>%
     filter(is.na(Diameter)) %>%
@@ -461,6 +499,8 @@ if (anyNA(data_cor$Diameter)) {
 We first remove all measures with either DBH = 0 cm or NA values.
 
 ```{r remove-na-dbh}
+#| message: false
+#| warning: false
 data_cor <- data_cor |>
   subset(Diameter > 0 & !is.na(Diameter))
 ```
@@ -514,6 +554,8 @@ if (length(unique(data_cor$MinDBH)) != 1) {
 ```
 
 ```{r remove-dbh-below-cutoff}
+#| message: false
+#| warning: false
 if (with(data_cor, !any(Diameter < MinDBH | Diameter < 10))) {
   text <- "There are no stems with a DBH below the DBH cutoff or below 10 cm."
 } else {
@@ -554,6 +596,8 @@ data_cor <- data_cor %>% filter(Diameter >= MinDBH & Diameter >= 10)
 ### Level of taxonomic resolution
 
 ```{r na-sp}
+#| message: false
+#| warning: false
 if (anyNA(data_cor$scientific_cleaned)) {
   nb_na_sp <- sum(is.na(data_cor$scientific_cleaned))
   perc_na_sp <- round(
@@ -582,6 +626,8 @@ if (anyNA(data_cor$scientific_cleaned)) {
 `r text`
 
 ```{r display-taxo-resolution}
+#| message: false
+#| warning: false
 data_cor |>
   group_by(Site, Plot, Year) |>
   summarise(
@@ -602,6 +648,8 @@ data_cor |>
 ### Remove dead trees
 
 ```{r remove-dead}
+#| message: false
+#| warning: false
 alive <- c(1:4, TRUE, NA, "Normal", "Recruit")
 # embrapa sites : CIF <= 5: live trees
 if ("LifeStatus" %in% colnames(data_cor)) {
