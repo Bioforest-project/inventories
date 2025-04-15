@@ -145,7 +145,6 @@ if (!file.exists("data/raw_data/bioforest-plot-information.csv")) {
       path = "data/raw_data/bioforest-plot-information",
       type = "csv", overwrite = TRUE
     )
-  # TODO solve authentication error
 }
 plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
   mutate(site = as.character(site)) |>
@@ -261,10 +260,26 @@ This step checks for the absence of "anomalies" in the data.
 
 We paste the name of the site, plot, subplot and tag/ID of the tree and stem to create a new unique identifier for each stem.
 
+
 ```{r complete-idstem}
 data_cor <- data_cor |>
   mutate(IdStem = paste(Site, Plot, Subplot, IdTree, IdStem, sep = "_"))
 ```
+
+
+```{r get-stem-id-iwokrama}
+if (any(data_cor$Site == "Iwokrama")) {
+  data_cor <- data_cor |> 
+    rename(IdMeas = IdTree) |> 
+    separate_wider_delim(IdMeas, "_", names = "IdTree", too_many = "drop") |> 
+    mutate(IdStem = paste(Site, Plot, Subplot, IdTree, sep = "_"))
+  text <- paste("In Iwokrama, we have removed census year information from the",
+                "stem ID so that measurements of the same stem can be matched",
+                "across censuses.")
+}
+```
+
+`r text`
 
 We then check that there are no duplicated measurements for the same stem ID in a given census.
 
