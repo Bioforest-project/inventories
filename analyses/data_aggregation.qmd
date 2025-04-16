@@ -1184,6 +1184,10 @@ if (sum(is.na(data_cor$Diameter)) > 0) {
 
 ## Substitute excessive DBH changes
 
+Growth and productivity measurements are very sensitive to large changes in DBH, for example when the measurement height is changed. To mitigate this problem, we replace excessive DBH changes with the average growth value of similar trees (without changing the DBH values). 
+
+This poses two challenges: 1. what can be considered an 'excessive' DBH change and 2. how to define 'similar' trees.
+
 ```{r estimate-dbh-growth}
 data_years <- data_cor |> 
   select(Site, Plot, Subplot, Year) |> 
@@ -1202,13 +1206,7 @@ data_cor <- data_cor |>
   ungroup()
 ```
 
-### Define DBH change threshold
-
-> proposal: use general threshold for lower bound, and moving 99th (or 95th) percentile for upper bound
-
-DBH thresholds are defined by size class: trees DBH are split into 20 quantiles. The 99th DBH growth value per quantile is defined as the upper limit above with DBH growth values are considered outliers. The lower DBH growht limit is defined as the 1st percentile of DBH growth for all trees.
-
-#### Group species by growth rate
+Here we defined 'similar' trees by first grouping them by species and size (DBH), assuming that these two factors are among the main drivers of tree growth. We ranked species by median DBH growth and divided them into four groups of increasing median DBH growth, with similar numbers of individual measurements per group.
 
 ```{r sp-groups}
 species_groups <- data_cor %>% 
@@ -1228,16 +1226,18 @@ if (any(!is.na(species_groups$med_growth))) {
   species_groups |> 
     subset(!is.na(sp_group) & !is.na(scientific_cleaned)) |> 
     group_by(sp_group) |> 
-    summarise(range = paste(round(range(med_growth), 2), collapse = " - "), 
+    summarise(range = paste(paste(round(range(med_growth), 2), collapse = " - "), "cm/yr"), 
               species = paste(scientific_cleaned, collapse = ", ")) |> 
-    select(range,	species) |> 
-    knitr::kable(col.names = c("Range of median diameter growth (cm)", "Species"))
+    select(range,	species) |> t() |>  
+    knitr::kable(col.names = paste("Group", 1:4), row.names = FALSE)
 }
 ```
 
-#### Create diameter quantiles per species group
+We then split each species group into 5 quantiles of DBH: this results in 20 groups of DBH growth measures based on both species-level growth rates and size (DBH).
 
-```{r dbh-change-thresholds}
+Outliers are defined here as the 0.5% lowest DBH growth values (all groups combined) and the 0.5% highest DBH growth values per group. These outliers in DBH growth were replaced by the mean growth of their group.
+
+```{r substitute-dbh-change}
 data_cor <- data_cor |> 
   merge(species_groups,by = "scientific_cleaned") |> 
   group_by(sp_group) |> 
@@ -1256,13 +1256,29 @@ data_cor <- data_cor |>
   ungroup() |>
   # substitute diameter growth
   mutate(diam_growth_cor = ifelse(outlier, average_growth, diam_growth))
+```
 
+```{r}
 if (sum(data_cor$outlier) > 0) {
   text <- paste("This graph shows all outlier DBH growth values (in cm/yr),", 
                 "as well as the lower and upper bounds of 'acceptable' DBH",
                 "growth (in red) and the average DBH growth with which outlier",
-                "values are replaced (blue), as a function of tree DBH.")
-  
+                "values are replaced (blue), as a function of tree DBH and",
+                "species groups.")  
+} else {
+  text <- paste("There were no diameter growth values to correct, as no stem",
+                "was measured more than once.")
+}
+```
+
+`r text`
+
+```{r dbh-change-fig}
+#| warning: false
+#| fig.height: 7
+#| fig.width: 11
+
+if (sum(data_cor$outlier) > 0) {
   data_thresh <- data_cor |>
     subset(!is.na(sp_group)) |> 
     group_by(sp_group, diam_group) |>
@@ -1283,56 +1299,59 @@ if (sum(data_cor$outlier) > 0) {
     geom_line(data = data_thresh, aes(x = value, y = average_growth), col = 4) +
     labs(x = "Diameter (cm)", y = "Diameter growth (cm/yr)") +
     ylim(-5, 10) +
-    facet_wrap(~sp_group, labeller = label_both) +
+    facet_wrap(~paste("Species group", sp_group)) +
     scale_x_log10() +
     theme_classic()
   
+}
+```
+
+```{r}
+if (sum(data_cor$outlier) > 0) {
+  text <- paste(
+    "The graph below shows a subset of trees with outlier DBH",
+    "growth values; the top panels show the DBH growth values and",
+    "the bottom panels show the corresponding DBH values (one",
+    "column per tree). The red dots are the outlier DBH growth",
+    "values, which were then replaced by the average growth values",
+    "for their group (species x DBH). DBH values were not replaced.")  
 } else {
-  text <- paste("There were no diameter growth values to correct, as no stem",
-                "was measured more than once.")
+  text <-""
 }
 ```
 
 `r text`
 
-<!-- ### Shift DBH series -->
+```{r show-examples-substitution}
+#| warning: false
+#| fig.height: 6
+#| fig.width: 12
+#| 
 
-<!-- When there is a reported change in height of measurement but the new height of measurement is unknown. -->
-
-<!-- ```{r shift-dbh} -->
-<!-- data_cor <- data_cor |> -->
-<!--   group_by(IdStem) |> -->
-<!--   mutate( -->
-<!--     hom_increase = c(NA, diff(HOM) > 0) -->
-<!--   ) -->
-<!-- # what column could have info on HOM change when no HOM value is available? -->
-<!-- ``` -->
-
-### Substitute excessive DBH changes
-
-Outliers in DBH growth (but not DBHs) are replaced by the mean DBH growth of the corresponding size class (after excluding outlier values).
-
-> Replacement by average DBH growth values is not optimal; it may introduce bias depending on the variable being estimated. For example, for AGB productivity it would be better to use average AGB.
-
-`r with(data_cor, sum(diam_growth_cor != diam_growth & !is.na(diam_growth_cor)))` outlier DBH growth values were substituted. The following graph shows a subset of trees where the most DBH growth values were substituted.
-
-```{r substitute-excessive-dbh-change}
 if (sum(data_cor$outlier) > 0) {
   id_cor <-
     data_cor |>
     subset(outlier) |> 
     group_by(sp_group) |> 
-    summarise(id = sample(unique(IdStem), min(1, length(unique(IdStem)))))
+    summarise(id = sample(unique(IdStem), min(2, length(unique(IdStem)))))
   
+  labs_diam <- c(diam_growth = "Diameter growth rate (cm/yr)", 
+                 diameter_cor = "Diameter (cm)")
   data_cor |>
     subset(IdStem %in% id_cor$id) |>
+    separate(Plot, c(NA, "plot_label", NA), sep = "-", remove = FALSE) |> 
+    mutate(label = paste0("Plot: ", plot_label, "_", Subplot, 
+                          "\n treeID: ", IdTree, "\n", scientific_cleaned)) |> 
     pivot_longer(cols = c("diam_growth", "diameter_cor")) |>
     ggplot(aes(x = Year)) +
     geom_point(aes(y = value, col = outlier)) +
-    labs(col = "Outlier DBH growth?") +
+    labs(col = "Outlier DBH growth?", y = NULL) +
     scale_color_manual(values = c("black", "red")) +
-    facet_grid(name ~ IdStem, scales = "free") +
-    theme_bw()
+    facet_grid(name ~ label, scales = "free", switch = "y",
+               labeller = labeller(name = labs_diam)) +
+    theme_bw() +
+    theme(legend.position = "bottom", strip.placement = "outside", 
+          strip.background.y = element_blank())
 }
 ```
 
