@@ -6,7 +6,7 @@ format:
     number-sections: true
     colorlinks: true
 params: 
-  site: malinau
+  site: sao-nicolau
   taper: false
   plot_filter: false
   plot: "Manare_I"
@@ -42,9 +42,10 @@ You should have already:
 
 -   sent us your species list;
 
--   added plot-level information to this [document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link).
+-   added plot-level information to this [document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link, with the same plot names as in your dataset.
 
 -   made sure all input files are in the same folder
+
 
 ```{r load-data, echo=FALSE}
 #| message: false
@@ -248,13 +249,13 @@ if (nrow(data_cor) == 0) {
 }
 ```
 
-`r text`
-
-If needed, you can add any missing information to the [online document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link) or check that the site and plot names are consistent between your harmonized data and the online document.
-
 # General presentation of the data
 
 This document presents the data aggregation for the `r paste(unique(data_cor$Site), collapse = ", ")` site(s). The site(s) have `r length(unique(data_cor$Plot))` plots.
+
+`r text`
+
+If needed, you can add any missing information to the [online document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link) or check that the site and plot names are consistent between your harmonized data and the online document.
 
 It has `r dim(data_cor)[1]` observations, belonging to `r length(unique(data_cor$IdStem))` stems.
 
@@ -274,9 +275,37 @@ data_cor %>%
                              "Number of individuals"))
 ```
 
-Censuses were conducted between `r min(data_cor$Year)` and `r max(data_cor$Year)`.
-
 *Please let us know if there are missing plots or censuses.*
+
+## Visualizing plots and censuses
+
+The following figures show the location of each plot as indicated by you in the [online document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link), as well as the censuses in which each plot was measured. 
+
+```{r maps-visual}
+#| message: false
+#| warning: false
+# Maps per plot and per census
+map <- ggplot(data_cor, aes(x = longitude, y = latitude, color = as.factor(Plot))) +
+  geom_point(alpha = 0.6, show.legend = FALSE) +
+  #facet_wrap(~ Year) +
+  labs(title = "Map of Plots by Census Year",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Plot ID") +
+  theme_minimal()
+
+plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
+  geom_point(alpha = 0.6, show.legend = FALSE) +
+  #facet_wrap(~ Year) +
+  labs(title = "Plots censused across years",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Plot ID") +
+  theme_minimal()
+
+(map / plots)
+
+```
 
 # Check data consistency
 
@@ -284,8 +313,10 @@ This step checks for the absence of "anomalies" in the data.
 
 ## Avoid duplicated measurements
 
-We paste the name of the site, plot, subplot and tag/ID of the tree and stem to create a new unique identifier for each stem.
+We want to make sure that there are no duplicated measurements in the data. So we create a unique identifier for each stem by combining the name of the site, plot, subplot and tag/ID of the tree and stem. We then check that there are no duplicated measurements for the same stem ID in a given census. Here is the process we follow:
+1. If there are fully identical rows present in the dataset, only the first row is kept and all others are removed.
 
+If we find duplicates, only the first observation is retained in the data.
 
 ```{r complete-idstem}
 #| message: false
@@ -293,7 +324,6 @@ We paste the name of the site, plot, subplot and tag/ID of the tree and stem to 
 data_cor <- data_cor |>
   mutate(IdStem = paste(Site, Plot, Subplot, IdTree, IdStem, sep = "_"))
 ```
-
 
 ```{r get-stem-id-iwokrama}
 if (any(data_cor$Site == "Iwokrama")) {
@@ -309,8 +339,6 @@ if (any(data_cor$Site == "Iwokrama")) {
 
 `r text`
 
-We then check that there are no duplicated measurements for the same stem ID in a given census.
-
 ```{r print-duplicated-stems}
 #| message: false
 #| warning: false
@@ -318,7 +346,7 @@ nb_stem_plot <- data_cor %>%
   count(IdStem, IdCensus)
 
 if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
-  text <- "There is no duplicated stem identifiers within a same census."
+  text <- "There is no duplicated stem identifiers within a same census in this site, so we move on to checking for multi-stemmed trees."
 } else {
   stem_dupli <- nb_stem_plot %>%
     filter(n > 1)
@@ -356,16 +384,18 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
       "leaving a dataset of", dim(data_cor)[1], "observations."
     )
   } else {
-    text <- ""
+    text <- "We checked for true duplicates (fully identical rows), and there are none in this dataset. We will now move on to checking for multi-stemmed trees."
   }
   nb_stem_plot_bis <- data_cor %>%
     count(IdStem, IdCensus)
 } else { # if no duplicated rows
-  text <- ""
+  text <- "We checked for true duplicates (fully identical rows), and there are none in this dataset. We will now move on to checking for multi-stemmed trees."
 }
 ```
 
 `r text`
+
+We then check for duplicates within the same
 
 ```{r remaining-duplicated-stems}
 #| message: false
@@ -996,35 +1026,6 @@ ggplot(genus_count, aes(x = Year, y = num_genus,
 
 ```
 
-## Visualizing plots and censuses
-
-```{r maps-visual}
-#| message: false
-#| warning: false
-# Maps per plot and per census
-map <- ggplot(data_cor, aes(x = longitude, y = latitude, color = as.factor(Plot))) +
-  geom_point(alpha = 0.6, show.legend = FALSE) +
-  #facet_wrap(~ Year) +
-  labs(title = "Map of Plots by Census Year",
-       x = "Longitude",
-       y = "Latitude",
-       color = "Plot ID") +
-  theme_minimal()
-
-plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
-  geom_point(alpha = 0.6, show.legend = FALSE) +
-  #facet_wrap(~ Year) +
-  labs(title = "Plots censused across years",
-       x = "Longitude",
-       y = "Latitude",
-       color = "Plot ID") +
-  theme_minimal()
-
-(map / plots)
-
-
-
-```
 
 # DBH corrections
 
@@ -1325,12 +1326,19 @@ if (sum(data_cor$outlier) > 0) {
 <!-- When there is a reported change in height of measurement but the new height of measurement is unknown. -->
 
 <!-- ```{r shift-dbh} -->
+
 <!-- data_cor <- data_cor |> -->
+
 <!--   group_by(IdStem) |> -->
+
 <!--   mutate( -->
+
 <!--     hom_increase = c(NA, diff(HOM) > 0) -->
+
 <!--   ) -->
+
 <!-- # what column could have info on HOM change when no HOM value is available? -->
+
 <!-- ``` -->
 
 ### Substitute excessive DBH changes
