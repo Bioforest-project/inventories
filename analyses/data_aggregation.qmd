@@ -382,18 +382,16 @@ if (anyNA(data_cor$scientific_cleaned)) {
   )
   nb_na_sp_tree <- data_cor %>%
     filter(is.na(scientific_cleaned)) %>%
-    summarise((length(unique(IdTree))))
+    summarise((length(unique(paste(Site, Plot, Subplot, IdTree)))))
   text <- paste("In this dataset, there are",
     nb_na_sp,
     "observations with NAs in the scientific names, which represent",
     perc_na_sp,
-    "% of the observations.
-    This concerns",
+    "% of the observations. This concerns",
     nb_na_sp_tree,
     "trees.",
-    "The observations with NAs in the scientific names
-    are distributed across the plots and censuses as shown in the figure below",
-    sep = " "
+    "The observations with NAs in the scientific names are distributed across", 
+    "the plots and censuses as shown in the figure below"
   )
 } else {
   text <- "There are no unidentified trees."
@@ -402,7 +400,7 @@ if (anyNA(data_cor$scientific_cleaned)) {
 
 `r text`
 
-Here we have a figure showing the resolution of taxonomic identification in the data provided. The green part in the bars represents the proportion of trees identified to the species level, in blue upto the genus level, and in red, it shows the proportion of unidentified species.
+Here we have a figure showing the resolution of taxonomic identification in the data provided. The green part in the bars represents the proportion of trees identified to the species level, in blue up to the genus level, and in red, it shows the proportion of unidentified species.
 
 If you notice an inconsistency in this information, please let us know.
 
@@ -454,7 +452,7 @@ if (any(data_cor$Site == "Iwokrama")) {
     "stem ID so that measurements of the same stem can be matched",
     "across censuses."
   )
-}
+} else text <- ""
 ```
 
 `r text`
