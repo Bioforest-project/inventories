@@ -334,6 +334,46 @@ data_cor |>
 ```
 
 
+```{r}
+#| warning: false
+# add scientific names of unidentified stems based on vernacular names
+# (only for French Guiana sites)
+
+if (params$site %in% c("paracou", "montagne-tortue", "bafog", "manare")) {
+  vern <- data_cor |> 
+    select(vernacular_raw, scientific_cleaned) |> 
+    drop_na() |> 
+    subset(vernacular_raw !="-" & 
+             !str_detect(substr(vernacular_raw, 1, 1), "[[:upper:]]")) |> 
+    group_by(vernacular_raw) |> 
+    summarise(scientific_vern = names(
+      sort(table(scientific_cleaned),decreasing=TRUE))[1])|> 
+    separate(scientific_vern, c("genus_vern", "species_vern"), remove = FALSE)
+  
+  data_cor <- merge(data_cor, vern, all.x = TRUE)
+  data_cor <- data_cor |> 
+    mutate(scientific_cleaned = ifelse(
+      is.na(scientific_cleaned), 
+      scientific_vern,
+      scientific_cleaned)) |> 
+    mutate(genus_cleaned = ifelse(
+      is.na(genus_cleaned), 
+      genus_vern,
+      genus_cleaned)) |> 
+    mutate(species_cleaned = ifelse(
+      is.na(species_cleaned), 
+      species_vern,
+      species_cleaned))
+  
+  text <- paste("For sites in French Guiana, where there is information on the", 
+                "vernacular name but not on the scientific name, we add the scientific name", 
+                "that was most frequently associated to that vernacular name in the rest", 
+                "of the dataset.")
+} else {text <- ""}
+```
+
+`r text`
+
 
 # Check data consistency
 
