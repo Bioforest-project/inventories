@@ -449,7 +449,7 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
                   still_stem_dupli <- TRUE
       }
     else
-        still_stem_dupli <- FALSE
+        still_stem_dupli <- TRUE
   }
 } else {
   still_stem_dupli <- FALSE
