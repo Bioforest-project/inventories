@@ -259,6 +259,8 @@ If needed, you can add any missing information to the [online document](https://
 
 It has `r dim(data_cor)[1]` observations, belonging to `r length(unique(data_cor$IdStem))` stems.
 
+## Summary of plots and censuses
+
 The following table shows the number of censuses per plots, the first and last year of census, and the number of individuals measured in each census.
 
 ```{r show-census-count}
@@ -306,6 +308,32 @@ plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
 (map / plots)
 
 ```
+
+## Visualizing taxonomic identification resolution
+
+Here we have a figure showing the resolution of taxonomic identification in the data provided. The green part in the bars represents the proportion of trees identified to the species level, in blue upto the genus level, and in red, it shows the proportion of unidentified species.
+
+If you notice an inconsistency in this information, please let us know.
+
+```{r display-taxo-resolution}
+#| message: false
+#| warning: false
+data_cor |>
+  group_by(Site, Plot, Year) |>
+  summarise(
+    pundet = sum(is.na(genus_cleaned)) / length(genus_cleaned),
+    pgenus = sum(!is.na(genus_cleaned) & is.na(species_cleaned))
+    / length(genus_cleaned),
+    pspecies = sum(!is.na(species_cleaned)) / length(species_cleaned)
+  ) |>
+  pivot_longer(cols = c("pundet", "pgenus", "pspecies")) |>
+  ggplot(aes(Year, value, fill = name)) +
+  geom_col() +
+  facet_wrap(~Plot) +
+  theme_minimal()
+```
+
+
 
 # Check data consistency
 
@@ -395,7 +423,7 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 
 `r text`
 
-We then check for duplicates within the same
+We then check for duplicates within the same census.
 
 ```{r remaining-duplicated-stems}
 #| message: false
@@ -414,10 +442,14 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
       "There are still",
       dim(stem_dupli_bis)[1],
       "cases of duplicated stem identifiers within a same census,",
-      "which are not fully replicated rows.",
-      "This concern the following cases:"
+      "which are not fully replicated rows."
     )
-    still_stem_dupli <- TRUE
+      if (dim(stem_dupli_bis)[1] < 20){
+    text <- paste("This concern the following cases:")
+                  still_stem_dupli <- TRUE
+      }
+    else
+        still_stem_dupli <- FALSE
   }
 } else {
   still_stem_dupli <- FALSE
@@ -430,7 +462,7 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 #| message: false
 #| warning: false
 if (still_stem_dupli == TRUE) {
-  if (nrow(stem_dupli_bis) > 10) {
+  if (dim(stem_dupli_bis)[1] > 20) {
     text <- paste(
       "There are still ", nrow(stem_dupli_bis), " stem duplicates. ",
       "As the number is too high, we are unable to print all the stem names. ",
@@ -459,7 +491,7 @@ if (still_stem_dupli == TRUE) {
   data_cor <- data_cor |>
     subset(!duplicated(paste(IdStem, IdCensus)))
 } else {
-  text <- ""
+  text <-  "There are no more duplicates measurements in this dataset. We will now move on to checking for multi-stemmed trees."
 }
 ```
 
@@ -676,23 +708,7 @@ if (anyNA(data_cor$scientific_cleaned)) {
 
 `r text`
 
-```{r display-taxo-resolution}
-#| message: false
-#| warning: false
-data_cor |>
-  group_by(Site, Plot, Year) |>
-  summarise(
-    pundet = sum(is.na(genus_cleaned)) / length(genus_cleaned),
-    pgenus = sum(!is.na(genus_cleaned) & is.na(species_cleaned))
-    / length(genus_cleaned),
-    pspecies = sum(!is.na(species_cleaned)) / length(species_cleaned)
-  ) |>
-  pivot_longer(cols = c("pundet", "pgenus", "pspecies")) |>
-  ggplot(aes(Year, value, fill = name)) +
-  geom_col() +
-  facet_wrap(~Plot) +
-  theme_minimal()
-```
+
 
 ## Remove measurements other than live trees
 
