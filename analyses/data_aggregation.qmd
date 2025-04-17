@@ -1420,8 +1420,6 @@ if (sum(data_cor$outlier) > 0) {
 data_aggr <- c()
 ```
 
-## Add census year information for flux calculation
-
 ```{r diff-year}
 #| message: false
 #| warning: false
