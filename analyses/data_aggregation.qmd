@@ -76,6 +76,10 @@ read_harmonized <- function(file) {
     col_types = cols()
   ) %>%
     add_column(!!!cols[!names(cols) %in% names(.)]) %>%
+    # remove duplicated genus from scientific name
+    mutate(ScientificName = ifelse(
+      str_count(ScientificName, Genus) == 2, 
+      Species, ScientificName)) %>%
     mutate(raw_taxonomy = paste(
       ScientificName, "-", VernName, "-",
       Family, Genus, Species
