@@ -257,7 +257,7 @@ This document presents the data aggregation for the `r paste(unique(data_cor$Sit
 
 If needed, you can add any missing information to the [online document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link) or check that the site and plot names are consistent between your harmonized data and the online document.
 
-It has `r dim(data_cor)[1]` observations, belonging to `r length(unique(data_cor$IdStem))` stems.
+The dataset has `r dim(data_cor)[1]` observations, belonging to `r length(unique(data_cor$IdStem))` stems.
 
 ## Summary of plots and censuses
 
@@ -309,30 +309,11 @@ plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
 
 ```
 
-## Visualizing taxonomic identification resolution
+## Taxonomic identification
 
-Here we have a figure showing the resolution of taxonomic identification in the data provided. The green part in the bars represents the proportion of trees identified to the species level, in blue upto the genus level, and in red, it shows the proportion of unidentified species.
+The taxonomic identification resolution of each site is different, so we try to identify this level, and ensure that it is not what is far from expected. 
 
-If you notice an inconsistency in this information, please let us know.
-
-```{r display-taxo-resolution}
-#| message: false
-#| warning: false
-data_cor |>
-  group_by(Site, Plot, Year) |>
-  summarise(
-    pundet = sum(is.na(genus_cleaned)) / length(genus_cleaned),
-    pgenus = sum(!is.na(genus_cleaned) & is.na(species_cleaned))
-    / length(genus_cleaned),
-    pspecies = sum(!is.na(species_cleaned)) / length(species_cleaned)
-  ) |>
-  pivot_longer(cols = c("pundet", "pgenus", "pspecies")) |>
-  ggplot(aes(Year, value, fill = name)) +
-  geom_col() +
-  facet_wrap(~Plot) +
-  theme_minimal()
-```
-
+Most sites have separate columns with the species vernacular names, and scientific names. For the purpose of this project, we hope to extract maximum possible information using both names. However, we only use scientific names further in this document.
 
 ```{r}
 #| warning: false
@@ -369,10 +350,65 @@ if (params$site %in% c("paracou", "montagne-tortue", "bafog", "manare")) {
                 "vernacular name but not on the scientific name, we add the scientific name", 
                 "that was most frequently associated to that vernacular name in the rest", 
                 "of the dataset.")
-} else {text <- ""}
+} else {text <- "If your site has only vernacular names, and if you have any information for the corresponding scientific names, please contact us to include the table in our analysis."}
 ```
 
 `r text`
+
+```{r na-sp}
+#| message: false
+#| warning: false
+if (anyNA(data_cor$scientific_cleaned)) {
+  nb_na_sp <- sum(is.na(data_cor$scientific_cleaned))
+  perc_na_sp <- round(
+    sum(is.na(data_cor$scientific_cleaned)) * 100 / dim(data_cor)[1], 2
+  )
+  nb_na_sp_tree <- data_cor %>%
+    filter(is.na(scientific_cleaned)) %>%
+    summarise((length(unique(IdTree))))
+  text <- paste("In this dataset, there are",
+    nb_na_sp,
+    "observations with NAs in the scientific names, which represent",
+    perc_na_sp,
+    "% of the observations.
+    This concerns",
+    nb_na_sp_tree,
+    "trees.",
+    "The observations with NAs in the scientific names
+    are distributed across the plots and censuses as follow:",
+    sep = " "
+  )
+} else {
+  text <- "There are no unidentified trees."
+}
+```
+
+`r text`
+
+Here we have a figure showing the resolution of taxonomic identification in the data provided. The green part in the bars represents the proportion of trees identified to the species level, in blue upto the genus level, and in red, it shows the proportion of unidentified species.
+
+If you notice an inconsistency in this information, please let us know.
+
+```{r display-taxo-resolution}
+#| message: false
+#| warning: false
+data_cor |>
+  group_by(Site, Plot, Year) |>
+  summarise(
+    pundet = sum(is.na(genus_cleaned)) / length(genus_cleaned),
+    pgenus = sum(!is.na(genus_cleaned) & is.na(species_cleaned))
+    / length(genus_cleaned),
+    pspecies = sum(!is.na(species_cleaned)) / length(species_cleaned)
+  ) |>
+  pivot_longer(cols = c("pundet", "pgenus", "pspecies")) |>
+  ggplot(aes(Year, value, fill = name)) +
+  geom_col() +
+  facet_wrap(~Plot) +
+  labs(fill = "ID level", title = "Proportion of taxonomic ID resolution") +
+  theme_minimal()
+```
+
+
 
 
 # Check data consistency
@@ -381,8 +417,7 @@ This step checks for the absence of "anomalies" in the data.
 
 ## Avoid duplicated measurements
 
-We want to make sure that there are no duplicated measurements in the data. So we create a unique identifier for each stem by combining the name of the site, plot, subplot and tag/ID of the tree and stem. We then check that there are no duplicated measurements for the same stem ID in a given census. Here is the process we follow:
-1. If there are fully identical rows present in the dataset, only the first row is kept and all others are removed.
+We want to make sure that there are no duplicated measurements in the data. So we create a unique identifier for each stem by combining the name of the site, plot, subplot and tag/ID of the tree and stem. We then check that there are no duplicated measurements for the same stem ID in a given census. 
 
 If we find duplicates, only the first observation is retained in the data.
 
@@ -418,7 +453,7 @@ if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
 } else {
   stem_dupli <- nb_stem_plot %>%
     filter(n > 1)
-  text <- paste("There are ",
+  text <- paste("In this dataset, there are ",
     dim(stem_dupli)[1],
     " cases of duplicated stem identifiers within a same census,",
     " with a number of duplications ranging from ",
@@ -452,12 +487,12 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
       "leaving a dataset of", dim(data_cor)[1], "observations."
     )
   } else {
-    text <- "We checked for true duplicates (fully identical rows), and there are none in this dataset. We will now move on to checking for multi-stemmed trees."
+    text <- "We checked for true duplicates (fully identical rows), and there are none in this dataset."
   }
   nb_stem_plot_bis <- data_cor %>%
     count(IdStem, IdCensus)
 } else { # if no duplicated rows
-  text <- "We checked for true duplicates (fully identical rows), and there are none in this dataset. We will now move on to checking for multi-stemmed trees."
+  text <- "We checked for true duplicates (fully identical rows), and there are none in this dataset."
 }
 ```
 
@@ -504,7 +539,7 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 if (still_stem_dupli == TRUE) {
   if (dim(stem_dupli_bis)[1] > 20) {
     text <- paste(
-      "There are still ", nrow(stem_dupli_bis), " stem duplicates. ",
+      #"There are still ", nrow(stem_dupli_bis), " stem duplicates. ",
       "As the number is too high, we are unable to print all the stem names. ",
       "Please check your data or discuss with us on why this might be happening."
     )
@@ -537,7 +572,9 @@ if (still_stem_dupli == TRUE) {
 
 `r text`
 
-## Are there multi-stemmed trees?
+## Check multi-stemmed trees
+
+The next step is to make sure the dataset as a realistic number of multi-stem trees.
 
 ```{r check-multi-stems}
 #| message: false
@@ -570,8 +607,12 @@ if (any(data_nstem$nstem != 1)) {
   } else {
     text <- paste(
       "There are", nrow(multi_stemmed), "multi-stemmed trees.",
-      "As the number is too high, we are unable to print all the stem names.","Please check your data or discuss with us if this is to be expected."
-    )
+      "As the number is too high, we are unable to print all the stem names, 
+      and we are printing only the first 10 rows.",
+      "Please check your data or discuss with us if this is to be expected.")
+      multi_stemmed[(1:10),] |>
+      knitr::kable()
+    
   }
 }
 ```
@@ -580,7 +621,11 @@ if (any(data_nstem$nstem != 1)) {
 
 ## Consistency of diameter measurements
 
-### Remove missing (NA) DBH values
+In this step, we will ensure the consistency of diameter measurements. 
+
+### Checking and removing missing (NA) and zeros in DBH values
+
+We do not allow any NA values in the DBH columns. If this dataset has any NAs or zeros in the Diameter column, we remove those values before proceeding. If there are either NAs or zeros, we will list the numbers below in a table for you to confirm if the number seems realistic.
 
 ```{r check-na-dbh}
 #| message: false
@@ -601,7 +646,7 @@ if (anyNA(data_cor$Diameter)) {
     sep = " "
   )
 } else {
-  text <- "There are no missing diameter in the data."
+  text <- "In this dataset, there are no missing diameters in the data."
 }
 ```
 
@@ -613,13 +658,48 @@ if (anyNA(data_cor$Diameter)) {
 if (anyNA(data_cor$Diameter)) {
   data_cor %>%
     filter(is.na(Diameter)) %>%
-    count(Plot, IdCensus) %>%
-    pivot_wider(names_from = Plot, values_from = n) %>%
+    count(Site, Plot, Year) %>%
+    #pivot_wider(names_from = Plot, values_from = n) %>%
     knitr::kable()
 }
 ```
 
-We first remove all measures with either DBH = 0 cm or NA values.
+```{r check-zero-dbh}
+#| message: false
+#| warning: false
+if (sum(data_cor$Diameter == 0, na.rm = TRUE) > 0) {
+  nb_zero_dbh <- sum(data_cor$Diameter == 0, na.rm = TRUE)
+  perc_zero_dbh <- round(
+    sum(data_cor$Diameter == 0, na.rm = TRUE) * 100 / dim(data_cor)[1],
+    2
+  )
+  text <- paste("There are",
+    nb_zero_dbh,
+    "diameters with the value zero in the data, which represent",
+    perc_zero_dbh,
+    "% of the observations.",
+    "The zeros are distributed across the plots",
+    "and censuses as follow:",
+    sep = " "
+  )
+} else {
+  text <- "There are no zeros in the diameters in the data."
+}
+```
+
+`r text`
+
+```{r print-zero-dbh}
+#| message: false
+#| warning: false
+if (sum(data_cor$Diameter == 0, na.rm = TRUE) > 0) {
+  data_cor %>%
+    filter(data_cor$Diameter == 0, na.rm = TRUE) %>%
+    count(Site, Plot, Year) %>%
+    #pivot_wider(names_from = Plot, values_from = n) %>%
+    knitr::kable()
+}
+```
 
 ```{r remove-na-dbh}
 #| message: false
@@ -628,16 +708,20 @@ data_cor <- data_cor |>
   subset(Diameter > 0 & !is.na(Diameter))
 ```
 
-### All trees are above the DBH cutoff
+The DBH values in this dataset are thus NA and zero free.
+
+### Checking DBH cutoff
+
+In this project, we are using various datasets from across the world which have different DBH limits. We want to ensure that there is one DBH cutoff throughout the data.
 
 ```{r get-dbh-cutoff}
 #| message: false
 #| warning: false
 if (length(unique(data_cor$MinDBH)) == 1) {
   text <- paste(
-    "There is a single DBH cutoff set to",
+    "In this dataset, there is a single DBH cutoff set to",
     unique(data_cor$MinDBH),
-    "cm for the whole data set."
+    "cm for this entire data set."
   )
 } else {
   # count the number of cutoff > 10 cm per plot and census
@@ -646,7 +730,7 @@ if (length(unique(data_cor$MinDBH)) == 1) {
     summarise(n_cutoff_sup_10 = length(unique(MinDBH[MinDBH > 10])))
   if (all(cutoff_plot_cens$n_cutoff_sup_10 == 0)) {
     text <- paste(
-      "All DBH cutoffs are at 10 cm or below;",
+      "In this dataset, all DBH cutoffs are at 10 cm or below;",
       "we will only use stems > 10 cm DBH."
     )
   } else {
@@ -654,9 +738,9 @@ if (length(unique(data_cor$MinDBH)) == 1) {
       subset(n_cutoff_sup_10 > 0) |>
       mutate(idplot = paste(Site, Plot, sep = "-"))
     text <- paste(
-      "The following plots have one or more DBH cutoffs",
+      "In this dataset, the following plots have one or more DBH cutoffs",
       "above 10 cm DBH:",
-      paste(data_above_10$idplot, collapse = ", ")
+      paste(data_above_10$idplot, collapse = ", "),
     )
   }
 }
@@ -675,6 +759,7 @@ if (length(unique(data_cor$MinDBH)) != 1) {
     knitr::kable()
 }
 ```
+As mentioned above, to maintain consistency, we will remove all stems below 10 am, if there are any.
 
 ```{r remove-dbh-below-cutoff}
 #| message: false
@@ -716,35 +801,6 @@ data_cor <- data_cor %>% filter(Diameter >= MinDBH & Diameter >= 10)
 
 `r text`
 
-### Level of taxonomic resolution
-
-```{r na-sp}
-#| message: false
-#| warning: false
-if (anyNA(data_cor$scientific_cleaned)) {
-  nb_na_sp <- sum(is.na(data_cor$scientific_cleaned))
-  perc_na_sp <- round(
-    sum(is.na(data_cor$scientific_cleaned)) * 100 / dim(data_cor)[1], 2
-  )
-  nb_na_sp_tree <- data_cor %>%
-    filter(is.na(scientific_cleaned)) %>%
-    summarise((length(unique(IdTree))))
-  text <- paste("There are",
-    nb_na_sp,
-    "observations with NAs in the scientific names, which represent",
-    perc_na_sp,
-    "% of the observations.
-    This concerns",
-    nb_na_sp_tree,
-    "trees.",
-    "The observations with NAs in the scientific names
-    are distributed across the plots and censuses as follow:",
-    sep = " "
-  )
-} else {
-  text <- "There are no unidentified trees."
-}
-```
 
 `r text`
 
