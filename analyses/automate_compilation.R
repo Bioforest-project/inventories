@@ -10,6 +10,10 @@ raw_data_sites <- gsub("^[^_]*_[^_]*_([^_]*)_.*$", "\\1",
   #  replacement = ""
   #unique()
 
+agg_data_sites <- gsub("^[^_]*_[^_]*_([^_]*)_.*$", "\\1", 
+                       list.files("data/derived_data", "aggregated") ) |>
+  unique()
+
 in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv", fileEncoding='latin1') |>
   subset(!is.na(longitude)) |>
   mutate(Site = site) |>
@@ -28,8 +32,9 @@ in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv", fileEnc
 compile_sites <- intersect(raw_data_sites, c("tene2018", in_plot_info))
 
 #removing sites that are not working 
-#remove <- c("mil", "corinto", "tirimbina", "tapajos114", "tapajos67")
-#compile_sites <- compile_sites[!compile_sites %in% remove] 
+remove <- c("mil","pad-limo-2-barracos","pad-limo-chico-bocao","pad-limo-cumaru",
+            "pad-limo-jatoba","pad-limo-pocao","pad-limo-stcp","pad-limo-tabocal")
+compile_sites <- compile_sites[!compile_sites %in% remove] 
 
 # cache: if we don't want to redo the compilation for files that already exist
 
@@ -38,7 +43,7 @@ cache <- TRUE
 if (cache) {
   #done <- list.files("reports/") |>
   #  gsub(pattern = "data_aggregation_|.pdf", replacement = "")
-  done <- list.files("data/derived_data/") |>
+  done <- list.files("data/derived_data/", pattern = "aggregated_data_") |>
     gsub(pattern = "aggregated_data_|.csv", replacement = "")
   compile_sites <- setdiff(compile_sites, done)
 }
