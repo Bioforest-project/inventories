@@ -6,10 +6,8 @@ format:
     number-sections: true
     colorlinks: true
 params: 
-  site: sao-nicolau
+  site: ecosilva
   taper: false
-  plot_filter: false
-  plot: "Manare_I"
 
 execute:
   echo: false      
@@ -38,7 +36,7 @@ Before you run this quarto script, please make sure that you complete the follow
 
 You should have already:
 
--   signed the data agreement;
+-   signed the [data agreement](https://drive.google.com/file/d/1xxeE1FkkTzfnTS7iRFf3vOaOS4FclL82/view?usp=drive_link)- please ask for access to the link if you don't have it;
 
 -   harmonized your **raw** dataset using the [DataHarmonization app](https://github.com/Alliance-for-Tropical-Forest-Science/DataHarmonization); the harmonized dataset should be placed in the same folder as this file;
 
@@ -46,7 +44,13 @@ You should have already:
 
 -   added plot-level information to this [document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link) with the same plot names as in your dataset.
 
+-   asked for files required to run this quarto script, namely the taxonomic corrections and functional traits 
+
 -   made sure all input files are in the same folder
+
+-   made sure that your file is named harmonized_data_site-name_versionname.csv
+
+Note: You need to use the same character strings in your harmonized file name and in the "params" at the beginning of this file.
 
 ```{r load-data, echo=FALSE}
 #| message: false
@@ -318,8 +322,8 @@ plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
   # facet_wrap(~ Year) +
   labs(
     title = "Plots censused across years",
-    x = "Longitude",
-    y = "Latitude",
+    x = "Year",
+    y = "Plot number",
     color = "Plot ID"
   ) +
   theme_minimal()
@@ -412,14 +416,14 @@ if (anyNA(data_cor$scientific_cleaned)) {
 
 `r text`
 
-Here we have a figure showing the resolution of taxonomic identification in the data provided. The green part in the bars represents the proportion of trees identified to the species level, in blue up to the genus level, and in red, it shows the proportion of unidentified species.
+Here we have a figure showing the resolution of taxonomic identification in the data provided. 
 
 If you notice an inconsistency in this information, please let us know.
 
 ```{r display-taxo-resolution}
 #| message: false
 #| warning: false
-data_cor |>
+plot_data <- data_cor |>
   group_by(Site, Plot, Year) |>
   summarise(
     pundet = sum(is.na(genus_cleaned)) / length(genus_cleaned),
@@ -427,13 +431,37 @@ data_cor |>
     / length(genus_cleaned),
     pspecies = sum(!is.na(species_cleaned)) / length(species_cleaned)
   ) |>
-  pivot_longer(cols = c("pundet", "pgenus", "pspecies")) |>
-  ggplot(aes(Year, value, fill = name)) +
+  pivot_longer(cols = c("pundet", "pgenus", "pspecies"))
+
+plot_data$name <- recode(plot_data$name,
+                         pundet = "Undetermined",
+                         pgenus = "Genus Only",
+                         pspecies = "Species")
+
+# Count number of unique plots
+n_plots <- length(unique(plot_data$Plot))
+
+# Set number of columns in facet_wrap
+ncol_facets <- 3
+
+# Calculate number of rows (ceiling to account for remainder)
+nrow_facets <- ceiling(n_plots / ncol_facets)
+
+# Set height per row (e.g., 3 inches per row)
+height_per_row <- 3
+
+# Final plot height
+plot_height <- nrow_facets * height_per_row
+
+# Create plot
+ggplot(plot_data, aes(Year, value, fill = name)) +
   geom_col() +
-  facet_wrap(~Plot) +
+  facet_wrap(~Plot, scales = "free_y", ncol = ncol_facets) +
+  scale_y_continuous(breaks = c(0, 0.5, 1)) +
   labs(fill = "ID level", title = "Proportion of taxonomic ID resolution") +
   theme_minimal() +
   theme(legend.position = "bottom")
+
 ```
 
 # Check data consistency
@@ -513,16 +541,31 @@ if (sum(data_cor$Diameter == 0, na.rm = TRUE) > 0) {
 ```{r print-zero-dbh}
 #| message: false
 #| warning: false
-if (sum(data_cor$Diameter == 0, na.rm = TRUE) > 0) {
+
+na_values <- if (anyNA(data_cor$Diameter)) {
+  data_cor %>%
+    filter(is.na(Diameter)) %>%
+    count(Site, Plot, Year) 
+    # pivot_wider(names_from = Plot, values_from = n) %>%
+    #knitr::kable()
+}
+
+zero_values <- if (sum(data_cor$Diameter == 0, na.rm = TRUE) > 0) {
   data_cor %>%
     filter(data_cor$Diameter == 0, na.rm = TRUE) %>%
-    count(Site, Plot, Year) %>%
+    count(Site, Plot, Year) 
     # pivot_wider(names_from = Plot, values_from = n) %>%
-    knitr::kable()
+    #knitr::kable()
 }
+
+merge(na_values, zero_values, by = c("Site", "Plot", "Year"), all = TRUE) |>
+knitr::kable()
+
+
+
 ```
 
-```{r remove-na-dbh}
+```{r remove-na-zero-dbh}
 #| message: false
 #| warning: false
 data_cor <- data_cor |>
