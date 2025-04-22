@@ -7,7 +7,7 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: paracou
+  site: manare
   taper: false
 
 execute:
@@ -519,18 +519,6 @@ if (anyNA(data_cor$Diameter)) {
 
 `r text`
 
-```{r print-na-dbh}
-#| message: false
-#| warning: false
-if (anyNA(data_cor$Diameter)) {
-  data_cor %>%
-    filter(is.na(Diameter)) %>%
-    count(Site, Plot, Year) %>%
-    # pivot_wider(names_from = Plot, values_from = n) %>%
-    knitr::kable()
-}
-```
-
 ```{r check-zero-dbh}
 #| message: false
 #| warning: false
@@ -544,10 +532,7 @@ if (sum(data_cor$Diameter == 0, na.rm = TRUE) > 0) {
     nb_zero_dbh,
     "diameters with the value zero in the data, which represent",
     perc_zero_dbh,
-    "% of the observations.",
-    "The zeros are distributed across the plots",
-    "and censuses as follow:",
-    sep = " "
+    "% of the observations."
   )
 } else {
   text <- "There are no zeros in the diameters in the data."
@@ -556,27 +541,30 @@ if (sum(data_cor$Diameter == 0, na.rm = TRUE) > 0) {
 
 `r text`
 
-```{r print-na-zero-dbh}
+```{r na-zero-dbh}
 #| message: false
 #| warning: false
 
-na_values <- if (anyNA(data_cor$Diameter)) {
-  data_cor %>%
-    filter(is.na(Diameter)) %>%
-    count(Site, Plot, Year)
-}
+missing_values <- data_cor %>%
+    filter(is.na(Diameter) | Diameter == 0) %>%
+    group_by(Site, Plot, Year) %>%
+  summarise(NAs = sum(is.na(Diameter)), 
+            Zeros = sum(Diameter == 0))
 
-zero_values <- if (sum(data_cor$Diameter == 0, na.rm = TRUE) > 0) {
-  data_cor %>%
-    filter(data_cor$Diameter == 0, na.rm = TRUE) %>%
-    count(Site, Plot, Year)
-}
+if (sum(missing_values$NAs) == 0) missing_values$NAs <- NULL
+if (sum(missing_values$Zeros) == 0) missing_values$Zeros <- NULL
 
-
-if (sum(zero_values) > 0 | (sum(na_values) > 0)) {
-  merge(na_values, zero_values, by = c("Site", "Plot", "Year"), all = TRUE) |>
-    knitr::kable()
+text <- ""
+if (any(colnames(missing_values) %in% c("Zeros", "NAs"))) {
+  text <- "Values are distributed in the dataset as follows:"
 }
+```
+
+`r text`
+
+```{r print-na-zero-dbh}
+missing_values %>%
+  knitr::kable()
 ```
 
 ```{r remove-na-zero-dbh}
@@ -618,7 +606,7 @@ if (length(unique(data_cor$MinDBH)) == 1) {
     text <- paste(
       "In this dataset, the following plots have one or more DBH cutoffs",
       "above 10 cm DBH:",
-      paste(data_above_10$idplot, collapse = ", "),
+      paste(data_above_10$idplot, collapse = ", ")
     )
   }
 }
