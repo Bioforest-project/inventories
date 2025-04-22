@@ -180,6 +180,19 @@ if (!file.exists("data/raw_data/bioforest-plot-information.csv")) {
       type = "csv", overwrite = TRUE
     )
 }
+```
+
+```{r add-e-var}
+#| message: false
+#| warning: false
+#| eval: false
+# add E variable for AGB allometry (from Chave et al 2014)
+read.csv("data/raw_data/bioforest-plot-information.csv") |>
+  mutate(e = computeE(cbind(longitude, latitude))) |>
+  write.csv("data/raw_data/bioforest-plot-information.csv", row.names = FALSE)
+```
+
+```{r get-plot-level-data}
 plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
   mutate(site = as.character(site)) |>
   rename(site_raw = site) |>
@@ -200,14 +213,6 @@ plot_information <- plot_information |>
   ) |>
   # remove "subplot" from Tene data
   mutate(plot = gsub("Subplot_", "", plot))
-```
-
-```{r add-e-var}
-#| message: false
-#| warning: false
-# add E variable for AGB allometry (from Chave et al 2014)
-plot_information <- plot_information |>
-  mutate(e = computeE(cbind(longitude_cor, latitude_cor)))
 ```
 
 ```{r harmonize-treatment-info}
@@ -264,19 +269,25 @@ missing <- paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")
 text <- ifelse(
   nchar(missing) > 0,
   paste0(
-    "The following plots in the dataset have missing coordinates and have
-    been removed from",
-    "the analysis: ", missing, "."
+    "The following plots in the dataset have missing coordinates: ", missing,
+    ". We used the average value for variable E in other plots (E = ",
+    round(mean(data_cor$e, na.rm = TRUE), 4), ")."
   ),
   "All plots in the dataset have coordinates."
 )
-if (nrow(data_cor) == 0) {
+
+data_cor <- data_cor |>
+  mutate(e = ifelse(is.na(e), mean(data_cor$e, na.rm = TRUE), e))
+
+if (sum(!is.na(data_cor$e)) == 0) {
   stop(paste0(
     "Please check the information (coordinates and treatment) ",
     "on the online document: https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link" # nolint
   ))
 }
 ```
+
+`r text`
 
 # General presentation of the data
 
@@ -512,14 +523,12 @@ if (anyNA(data_cor$Diameter)) {
     sum(is.na(data_cor$Diameter)) * 100 / dim(data_cor)[1],
     2
   )
-  text <- paste("There are",
+  text <- paste(
+    "There are",
     nb_na_dbh,
     "missing diameters in the data, which represent",
     perc_na_dbh,
-    "% of the observations.",
-    "The missing values are distributed across the plots",
-    "and censuses as follow:",
-    sep = " "
+    "% of the observations."
   )
 } else {
   text <- "In this dataset, there are no missing diameters in the data."
@@ -560,7 +569,7 @@ missing_values <- data_cor %>%
   group_by(Site, Plot, Year) %>%
   summarise(
     NAs = sum(is.na(Diameter)),
-    Zeros = sum(Diameter == 0)
+    Zeros = sum(!is.na(Diameter) & Diameter == 0)
   )
 
 if (sum(missing_values$NAs) == 0) missing_values$NAs <- NULL
@@ -1382,7 +1391,7 @@ data_cor <- data_cor |>
   mutate(dgrowth_upper = quantile(diam_growth, 0.995, na.rm = TRUE)) |>
   # define outlier values
   mutate(outlier = !is.na(diam_growth) &
-    (diam_growth < dgrowth_lower | diam_growth > dgrowth_upper)) |>  # nolint
+    (diam_growth < dgrowth_lower | diam_growth > dgrowth_upper)) |> # nolint
   # estimate average growth by group
   mutate(average_growth = mean(diam_growth[!outlier], na.rm = TRUE)) |>
   ungroup() |>
