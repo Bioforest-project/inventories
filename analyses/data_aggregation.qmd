@@ -304,7 +304,7 @@ data_cor %>%
     num_individuals = n_distinct(IdStem)
   ) %>%
   knitr::kable(col.names = c(
-    "Site", "Plot","Number of censuses",
+    "Site", "Plot", "Number of censuses",
     "First census", "Last census",
     "Number of individuals"
   ))
@@ -320,8 +320,10 @@ The following figures show the location of each plot as indicated by you in the 
 #| message: false
 #| warning: false
 # Maps per plot and per census
-map <- ggplot(data_cor, aes(x = longitude, y = latitude, 
-                            color = as.factor(Plot))) +
+map <- ggplot(data_cor, aes(
+  x = longitude, y = latitude,
+  color = as.factor(Plot)
+)) +
   geom_point(alpha = 0.6, show.legend = FALSE) +
   # facet_wrap(~ Year) +
   labs(
@@ -334,8 +336,11 @@ map <- ggplot(data_cor, aes(x = longitude, y = latitude,
 
 plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
   geom_point(alpha = 0.6, show.legend = FALSE) +
-  scale_y_discrete(breaks = c(min(data_cor$Plot), median(data_cor$Plot), max(data_cor$Plot))) +
-  # facet_wrap(~ Year) +
+  scale_y_discrete(breaks = c(
+    min(data_cor$Plot),
+    median(data_cor$Plot),
+    max(data_cor$Plot)
+  )) +
   labs(
     title = "Plots censused across years",
     x = "Year",
@@ -362,8 +367,8 @@ if (params$site %in% c("paracou", "montagne-tortue", "bafog", "manare")) {
   vern <- data_cor |>
     select(vernacular_raw, scientific_cleaned) |>
     drop_na() |>
-      subset(vernacular_raw != "-" &
-      !str_detect(substr(vernacular_raw, 1, 1), "[[:upper:]]")) |>
+    subset(vernacular_raw != "-" &
+      !str_detect(substr(vernacular_raw, 1, 1), "[[:upper:]]")) |> # nolint
     group_by(vernacular_raw) |>
     summarise(scientific_vern = names(
       sort(table(scientific_cleaned), decreasing = TRUE)
@@ -479,7 +484,11 @@ ggplot(plot_data, aes(Year, value, fill = name)) +
   labs(fill = "ID level", title = "Proportion of taxonomic ID resolution") +
   theme_minimal() +
   theme(legend.position = "bottom") +
-  theme(axis.text.x=element_text(size=rel(0.7)),axis.text.y=element_text(size=rel(0.7)), strip.text = element_text(size=rel(0.7)))
+  theme(
+    axis.text.x = element_text(size = rel(0.7)),
+    axis.text.y = element_text(size = rel(0.7)),
+    strip.text = element_text(size = rel(0.7))
+  )
 ```
 
 # Check data consistency
@@ -528,7 +537,8 @@ if (sum(data_cor$Diameter == 0, na.rm = TRUE) > 0) {
     sum(data_cor$Diameter == 0, na.rm = TRUE) * 100 / dim(data_cor)[1],
     2
   )
-  text <- paste("There are",
+  text <- paste(
+    "There are",
     nb_zero_dbh,
     "diameters with the value zero in the data, which represent",
     perc_zero_dbh,
@@ -546,10 +556,12 @@ if (sum(data_cor$Diameter == 0, na.rm = TRUE) > 0) {
 #| warning: false
 
 missing_values <- data_cor %>%
-    filter(is.na(Diameter) | Diameter == 0) %>%
-    group_by(Site, Plot, Year) %>%
-  summarise(NAs = sum(is.na(Diameter)), 
-            Zeros = sum(Diameter == 0))
+  filter(is.na(Diameter) | Diameter == 0) %>%
+  group_by(Site, Plot, Year) %>%
+  summarise(
+    NAs = sum(is.na(Diameter)),
+    Zeros = sum(Diameter == 0)
+  )
 
 if (sum(missing_values$NAs) == 0) missing_values$NAs <- NULL
 if (sum(missing_values$Zeros) == 0) missing_values$Zeros <- NULL
@@ -921,9 +933,9 @@ if ("LifeStatus" %in% colnames(data_cor)) {
   # TODO: ask for life status codes per site?
 } else {
   text <- paste(
-    "In this dataset, there was no column 'LifeStatus' with information about life status",
-    "(dead/alive), so we considered all stems to be alive: please let us know",
-    "if we should have used another column."
+    "In this dataset, there was no column 'LifeStatus' with information about",
+    "life status (dead/alive), so we considered all stems to be alive: please",
+    "let us know if we should have used another column."
   )
 }
 ```
@@ -940,7 +952,10 @@ The second step is to remove any other life forms apart from trees, such as Lian
 if ("LifeForm" %in% colnames(data_cor)) {
   data_cor <- data_cor |>
     # subsetting to remove life forms other
-    subset(!(tolower(LifeForm) %in% c("palm","palms", "tree fan", "death", "vine", "vines", "lianas"))) |>
+    subset(!(tolower(LifeForm) %in% c(
+      "palm", "palms", "tree fan", "death",
+      "vine", "vines", "lianas"
+    ))) |>
     # remove palm genera or vernacular names
     subset(family_cleaned != "Arecaceae" | is.na(family_cleaned)) |>
     # Astrocaryum vernacular name in Paracou, only identified to vern name
@@ -950,9 +965,10 @@ if ("LifeForm" %in% colnames(data_cor)) {
   )
 } else {
   text <- paste(
-    "In this dataset, there was no column 'LifeForm' with information about life forms",
-    "(such as trees, lianas, palms), so we assume that all individuals",
-    "in your dataset are trees. Please let us know if that is not the case."
+    "In this dataset, there was no column 'LifeForm' with information about",
+    "life forms (such as trees, lianas, palms), so we assume that all",
+    "individuals in your dataset are trees. Please let us know if that is not",
+    "the case."
   )
 }
 ```
@@ -1366,7 +1382,7 @@ data_cor <- data_cor |>
   mutate(dgrowth_upper = quantile(diam_growth, 0.995, na.rm = TRUE)) |>
   # define outlier values
   mutate(outlier = !is.na(diam_growth) &
-    (diam_growth < dgrowth_lower | diam_growth > dgrowth_upper)) |>
+    (diam_growth < dgrowth_lower | diam_growth > dgrowth_upper)) |>  # nolint
   # estimate average growth by group
   mutate(average_growth = mean(diam_growth[!outlier], na.rm = TRUE)) |>
   ungroup() |>
@@ -1750,8 +1766,10 @@ data_aggr |>
   )) +
   geom_line(show.legend = FALSE) +
   geom_point(show.legend = FALSE) +
-  labs(title = "Functional Variance Across Plots and Years",
-    x = "Year", y = "Index Value", color = "Plot") +
+  labs(
+    title = "Functional Variance Across Plots and Years",
+    x = "Year", y = "Index Value", color = "Plot"
+  ) +
   theme_minimal() +
   facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
@@ -1851,15 +1869,6 @@ data_aggr <- data_cor |>
   ) |>
   pivot_longer(starts_with("p_undet"), names_to = "variable") |>
   rbind(data_aggr)
-
-#data_aggr |>
-#  subset(grepl("p_undet", variable)) |>
-#  ggplot(aes(x = Year, y = value * 100, colour = factor(Plot))) +
-#  geom_line(show.legend = FALSE) +
-#  geom_point(show.legend = FALSE) +
-#  labs(y = "Undetermined stems (%)", colour = "Plot") +
-#  facet_wrap(~variable) +
-#  theme_minimal()
 ```
 
 ```{r functional-undet}
@@ -1958,8 +1967,10 @@ var_names <- c(
 )
 
 data_aggr |>
-  subset(variable %in% c("gini", "dbh_median", "dbh_mean", "dbh_min", "dbh_max")
-         ) |>
+  subset(variable %in% c(
+    "gini", "dbh_median", "dbh_mean",
+    "dbh_min", "dbh_max"
+  )) |>
   ggplot(aes(x = Year, y = value, color = factor(Plot))) +
   geom_line(show.legend = FALSE) +
   geom_point(show.legend = FALSE) +
@@ -2031,7 +2042,8 @@ data_aggr |>
   labs(
     title = "Demographic rates Across Plots and Years",
     x = "Year", y = "Index Value", color = "Plot"
-  ) +theme_minimal() +
+  ) +
+  theme_minimal() +
   facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
 
@@ -2251,7 +2263,8 @@ data_aggr |>
   labs(
     title = "Structural Diversity Across Plots and Years",
     x = "Year", y = "Index Value", color = "Plot"
-  ) +theme_minimal() +
+  ) +
+  theme_minimal() +
   facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
 
