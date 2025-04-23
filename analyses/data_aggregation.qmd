@@ -7,7 +7,7 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: pad-limo-2-barracos
+  site: iracema
   taper: false
 
 execute:
@@ -145,6 +145,18 @@ data_cor <- data_cor |>
   mutate(Plot = ifelse(Site == "Mil", paste0("UPA_B_", Plot), Plot)) |>
   # in Iracema, one value has missing Site name
   mutate(Site = ifelse(is.na(Site), names(sort(table(data_raw$Site)))[1], Site))
+
+# add census year when missing
+if (anyNA(data_cor$Year)) {
+  data_cor <- data_cor |>
+    select(Site, Plot, Year, IdCensus) |>
+    drop_na() |>
+    unique() |>
+    mutate(Year_Census = median(Year)) |>
+    merge(data_cor, all.y = TRUE) |>
+    mutate(Year = ifelse(is.na(Year), Year_Census, Year)) |>
+    mutate(Year_Census = NULL)
+}
 ```
 
 ```{r remove-values}
