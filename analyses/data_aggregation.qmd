@@ -7,7 +7,7 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: pad-limo-2-barracos
+  site: ecosilva
   taper: false
 
 execute:
@@ -33,9 +33,14 @@ library(patchwork)
 
 This document is intended for data contributors to the Bioforest project, an initiative of the TmFO network.
 
-**If you are viewing this document as a PDF :**
+There are 2 ways to view this document: 
 
-This document will help you visualize various aspects of your data, understand the applied data correction steps, and generate an aggregated dataset. This aggregated data set (depending on the variables available) will be used for analysis by various working groups in the Bioforest project. TIt also facilitates feedback from Site PIs regarding any necessary changes to corrections and aggregations. WWe encourage every Site PI to carefully review this document and provide feedback.
+1. You are viewing the PDF already generated for a dataset
+2. You have access to the Quarto script, which needs to be run with R in order to generate visual outputs or render a PDF.
+
+## If you are viewing this document as a PDF :
+
+This document will help you visualize various aspects of your data, understand the applied data correction steps, and generate an aggregated dataset. This aggregated data set (depending on the variables available) will be used for analysis by various working groups in the Bioforest project. It also facilitates feedback from Site PIs regarding any necessary changes to corrections and aggregations. We encourage every Site PI to carefully review this document and provide feedback.
 
 Before proceeding, please ensure that you have:
 
@@ -45,7 +50,9 @@ Before proceeding, please ensure that you have:
 
 -   Added plot-level information to this [document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link) with the same plot names as in your dataset.
 
-**If you are running the quarto script:**
+## If you are running the Quarto script (ignore this section if you are viewing the PDF):
+
+This script will take you through various aspects of your data, understand the applied data correction steps, visualize each step, and generate an aggregated dataset. This aggregated data set (depending on the variables available) will be used for analysis by various working groups in the Bioforest project. It also facilitates feedback from Site PIs regarding any necessary changes to corrections and aggregations. We encourage every Site PI to carefully review this document and provide feedback.
 
 Before running the Quarto script, please complete the following checklist and ensure your dataset is correctly named and structured.
 
@@ -204,6 +211,8 @@ if (!"e" %in% colnames(read.csv(paste0(path_metadata, ".csv")))) {
 ```
 
 ```{r get-plot-level-data}
+#| message: false
+#| warning: false
 plot_information <- read.csv(paste0(path_metadata, ".csv")) |>
   mutate(site = as.character(site)) |>
   rename(site_raw = site) |>
@@ -298,8 +307,6 @@ if (sum(!is.na(data_cor$e)) == 0) {
 }
 ```
 
-`r text`
-
 # General presentation of the data
 
 This document presents the data aggregation for the `r paste(unique(data_cor$Site), collapse = ", ")` site, with `r length(unique(data_cor$Plot))` plots, measured between `r min(data_cor$Year)` and `r max(data_cor$Year)`.
@@ -308,11 +315,11 @@ This document presents the data aggregation for the `r paste(unique(data_cor$Sit
 
 If needed, you can add any missing information to the [online document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link) or check that the site and plot names are consistent between your harmonized data and the online document.
 
-The dataset has `r dim(data_cor)[1]` observations, belonging to `r length(unique(data_cor$IdStem))` stems.
+The dataset has `r dim(data_cor)[1]` observations, belonging to `r length(unique(data_cor$IdStem))` stems including he following life forms: `r unique(data_cor$LifeForm)`.
 
 ## Summary of plots and censuses
 
-The following table shows the number of censuses per plots, the first and last year of census, and the number of individuals measured in each census. If you feel like the information is not accurate, please let us know the precise coordinates if the information is available.
+The following table shows the number of censuses per plots, the first and last year of census, and the number of individuals measured in each census. If you feel like the information is not accurate, please let us know.
 
 ```{r show-census-count}
 #| message: false
@@ -449,9 +456,7 @@ if (anyNA(data_cor$scientific_cleaned)) {
     perc_na_sp,
     "% of the observations. This concerns",
     nb_na_sp_tree,
-    "trees.",
-    "The observations with NAs in the scientific names are distributed across",
-    "the plots and censuses as shown in the figure below"
+    "trees."
   )
 } else {
   text <- "There are no unidentified trees."
@@ -493,7 +498,7 @@ ncol_facets <- 4
 nrow_facets <- ceiling(n_plots / ncol_facets)
 
 # Set height per row (e.g., 3 inches per row)
-height_per_row <- 3
+height_per_row <- 5
 
 # Final plot height
 plot_height <- nrow_facets * height_per_row
@@ -515,7 +520,7 @@ ggplot(plot_data, aes(Year, value, fill = name)) +
 
 # Check data consistency
 
-This step checks for the absence of "anomalies" in the data.
+This step checks for any anomalies in the data, that needs to be removed fro mthe dataset, or modified.
 
 ## Consistency of diameter measurements
 
@@ -523,7 +528,7 @@ In this step, we will ensure the consistency of diameter measurements.
 
 ### Missing (NA) and zeros in DBH values
 
-We do not allow any NA values in the DBH columns. If this dataset has any NAs or zeros in the Diameter column, we remove those values before proceeding. If there are either NAs or zeros, we will list the numbers below in a table for you to confirm if the number seems realistic.
+If this dataset contains any NAs or zeros, we will remove them in this step.
 
 ```{r check-na-dbh}
 #| message: false
@@ -535,7 +540,7 @@ if (anyNA(data_cor$Diameter)) {
     2
   )
   text <- paste(
-    "There are",
+    "In this dataset, there are",
     nb_na_dbh,
     "missing diameters in the data, which represent",
     perc_na_dbh,
@@ -558,14 +563,14 @@ if (sum(data_cor$Diameter == 0, na.rm = TRUE) > 0) {
     2
   )
   text <- paste(
-    "There are",
+    "In this dataset, there are",
     nb_zero_dbh,
     "diameters with the value zero in the data, which represent",
     perc_zero_dbh,
     "% of the observations."
   )
 } else {
-  text <- "There are no zeros in the diameters in the data."
+  text <- "In this dataset, there are no zeros in the diameters in the data."
 }
 ```
 
@@ -606,7 +611,7 @@ data_cor <- data_cor |>
   subset(Diameter > 0 & !is.na(Diameter))
 ```
 
-If there were NAs or zeros present in the dataset, we remove them. The DBH values in this dataset are thus NA and zero free.
+As we have removed all the NAs and zeros, the DBH values in this dataset are NA and zero free.
 
 ### Check DBH cutoff
 
@@ -617,7 +622,7 @@ In this project, we are using various datasets from across the world which have 
 #| warning: false
 if (length(unique(data_cor$MinDBH)) == 1) {
   text <- paste(
-    "In this dataset, there is a single DBH cutoff set to",
+    "There is a single DBH cutoff set to",
     unique(data_cor$MinDBH),
     "cm for this entire data set."
   )
@@ -739,21 +744,14 @@ nb_stem_plot <- data_cor %>%
   count(IdStem, IdCensus)
 
 if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
-  text <- "There is no duplicated stem identifiers within a same census in this
-  site, so we move on to checking for multi-stemmed trees."
+  text <- ""
 } else {
   stem_dupli <- nb_stem_plot %>%
     filter(n > 1)
   text <- paste("In this dataset, there are ",
     dim(stem_dupli)[1],
     " cases of duplicated stem identifiers within a same census,",
-    " with a number of duplications ranging from ",
-    stem_dupli %>% summarise(min(n)),
-    " and ",
-    stem_dupli %>% summarise(max(n)),
-    " (mean = ",
-    stem_dupli %>% summarise(round(mean(n), 2)),
-    "). These duplications concern ",
+    " with duplications. These duplications concern ",
     length(unique(stem_dupli$IdStem)),
     " stems.",
     sep = ""
@@ -778,8 +776,7 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
       "leaving a dataset of", dim(data_cor)[1], "observations."
     )
   } else {
-    text <- "We checked for true duplicates (fully identical rows), and there
-    are none in this dataset."
+    text <- ""
   }
   nb_stem_plot_bis <- data_cor %>%
     count(IdStem, IdCensus)
@@ -791,8 +788,6 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
 
 `r text`
 
-We then check for duplicates within the same census.
-
 ```{r remaining-duplicated-stems}
 #| message: false
 #| warning: false
@@ -801,15 +796,15 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
     length(unique(nb_stem_plot_bis$n)) == 1,
     unique(nb_stem_plot_bis$n) == 1
   )) {
-    text <- "There is no more duplicated stem identifiers within a same census."
+    text <- ""
     still_stem_dupli <- FALSE
   } else {
     stem_dupli_bis <- nb_stem_plot_bis %>%
       filter(n > 1)
     text <- paste(
-      "There are still",
+      "In this dataset, there are still",
       dim(stem_dupli_bis)[1],
-      "cases of duplicated stem identifiers within a same census,",
+      "cases of duplicated stem identifiers within the same census,",
       "which are not fully replicated rows."
     )
     if (dim(stem_dupli_bis)[1] < 20) {
@@ -883,12 +878,12 @@ data_nstem <- data_cor |>
   summarise(nstem = length(unique(IdStem)))
 if (all(data_nstem$nstem == 1)) {
   text <- paste(
-    "The number of stem identifiers and the number of tree identifiers are",
+    "In this dataset, the number of stem identifiers and the number of tree identifiers are",
     "equal, suggesting either that there are no multi-stemmed trees, or",
     "that the multiple stems are considered as different individuals."
   )
 } else {
-  text <- "The following trees have multiple stems:"
+  text <- "In this dataset, the following trees have multiple stems:"
 }
 ```
 
@@ -1464,29 +1459,31 @@ data_cor <- data_cor |>
 
 ## Taxonomic Diversity
 
-To evaluate taxonomic diversity, we use functions from the entropart package in R (Marcon et al., 2020). We estimate all these indices at both species and genus level.
+To evaluate taxonomic diversity, we used functions from the entropart package in R (Marcon et al., 2020). We estimated all these indices at both species and genus level.
 
 We quantified taxonomic diversity using Hill numbers, a family of diversity measures that account for both species richness and evenness.
 
 ### Species Richness
 
-Order q = 0: Species richness, which counts all species equally, regardless of their abundance.
+Diversity of Order q = 0: Species richness, which counts all species equally, regardless of their abundance.
 
 ### Shannon Diversity
 
-Order q = 1: Shannon diversity, calculated as the exponential of Shannon entropy, which gives proportional weight to species based on their relative abundances. This index balances sensitivity to both common and rare species.
+Diversity of Order q = 1: Shannon diversity, calculated as the exponential of Shannon entropy, which gives proportional weight to species based on their relative abundances. This index balances sensitivity to both common and rare species.
 
 ### Simpson Diversity
 
-Order q = 2: Simpson diversity, calculated as the inverse of the Simpson index, which emphasizes dominant species and is less sensitive to rare taxa.
+Diversity of Order q = 2: Simpson diversity, calculated as the inverse of the Simpson index, which emphasizes dominant species and is less sensitive to rare taxa.
 
 ### Evenness
 
-Evenness: Evenness reflects how uniformly individuals are distributed among the observed species. It was derived by dividing the observed diversity (for a given value of q) by the theoretical maximum diversity for the same number of species. Values closer to 1 indicate communities where individuals are more evenly distributed across species, while lower values indicate dominance by a few species.
+Evenness reflects how uniformly individuals are distributed among the observed species. It was derived by dividing the observed diversity (for a given value of q) by the theoretical maximum diversity for the same number of species. Values closer to 1 indicate communities where individuals are more evenly distributed across species, while lower values indicate dominance by a few species.
 
 ### Coverage
 
-Coverage: Sample coverage estimates the proportion of individuals in a community that belong to species already detected in the sample. It provides an indication of sampling completeness, with values approaching 1 suggesting that most of the community has been captured and that further sampling is unlikely to yield many additional species.
+Sample coverage estimates the proportion of individuals in a community that belong to species already detected in the sample. It provides an indication of sampling completeness, with values approaching 1 suggesting that most of the community has been captured and that further sampling is unlikely to yield many additional species.
+
+The following figures represent all the above mentioned indices at the species and genus level. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
 
 ```{r neutral-diversity}
 #| message: false
@@ -1567,7 +1564,12 @@ data_aggr %>%
     title = "Diversity Indices Across Plots and Years - Species level",
     x = "Year", y = "Index Value", color = "Plot"
   ) +
-  theme_minimal()
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = rel(0.7)),
+    axis.text.y = element_text(size = rel(0.7)),
+    strip.text = element_text(size = rel(0.7))
+  )
 
 data_aggr %>%
   subset(variable %in% neutral_div_gen$variable) %>%
@@ -1579,12 +1581,19 @@ data_aggr %>%
     title = "Diversity Indices Across Plots and Years - Genus level",
     x = "Year", y = "Index Value", color = "Plot"
   ) +
-  theme_minimal()
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = rel(0.7)),
+    axis.text.y = element_text(size = rel(0.7)),
+    strip.text = element_text(size = rel(0.7))
+  )
 ```
+
+
 
 ## Functional diversity and composition
 
-To evaluate the functional structure of plant communities, we assessed both functional composition and functional diversity using a set of ecologically meaningful plant traits. These metrics provide insight into how species differ in their ecological roles and how trait distributions shape community assembly.
+To evaluate the functional structure of plant communities, we assessed both functional composition and functional diversity using a set of ecologically meaningful plant traits. 
 
 ### Functional composition
 
@@ -1592,15 +1601,22 @@ We quantified the functional composition as the community-weighted mean (CWM) fo
 
 The traits computed in the analysis were:
 
--   Leaf area: Associated with light capture and leaf construction cost
+### Leaf area
+Associated with light capture and leaf construction cost
 
--   Leaf nitrogen content per leaf dry mass: Reflects photosynthetic capacity and nutrient-use strategy.
+### Leaf nitrogen content per leaf dry mass
+Reflects photosynthetic capacity and nutrient-use strategy.
 
--   Specific leaf area (SLA): Indicates growth rate and resource acquisition.
+### Specific leaf area (SLA)
+Indicates growth rate and resource acquisition.
 
--   Stem specific wood density: Related to mechanical strength, water transport efficiency, and survival strategies.
+### Stem specific wood density
+Related to mechanical strength, water transport efficiency, and survival strategies.
 
--   Asymptotic height: A proxy for maximum potential plant height.
+### Asymptotic height
+A proxy for maximum potential plant height.
+
+The following figures represent all the above mentioned indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
 
 ```{r functional-composition-ba}
 #| message: false
@@ -1636,10 +1652,10 @@ data_aggr <- data_cor |>
 
 var_names <- c(
   "LA_cwm_ba" = "Leaf area (mm2)",
-  "N_cwm_ba" = "Leaf nitrogen content \n per leaf dry mass (mg g-1)",
-  "SLA_cwm_ba" = "Specific leaf area (mm2 mg-1)",
-  "WD_cwm_ba" = "Stem specific wood density (g cm-3)",
-  "hmax_cwm_ba" = "Asymptotic height (m)"
+  "N_cwm_ba" = "Leaf nitrogen content \n per leaf dry mass \n (mg g-1)",
+  "SLA_cwm_ba" = "Specific leaf area \n (mm2 mg-1)",
+  "WD_cwm_ba" = "Stem specific wood \n density (g cm-3)",
+  "hmax_cwm_ba" = "Asymptotic height \n (m)"
 )
 
 data_aggr |>
@@ -1655,10 +1671,20 @@ data_aggr |>
     x = "Year", y = "Index Value", color = "Plot"
   ) +
   theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = rel(0.7)),
+    axis.text.y = element_text(size = rel(0.7)),
+    strip.text = element_text(size = rel(0.7))
+  ) +
   facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
 
 ### Functional variance
+
+Based on the functional trait values mentioned in the previous section, we calculated the variance of every functional trait. 
+
+The following figures represent all the above mentioned indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
+
 
 ```{r functional-var}
 #| message: false
@@ -1680,10 +1706,10 @@ data_aggr <- data_cor |>
 #| warning: false
 var_names <- c(
   "LA_cwv_n" = "Leaf area variance",
-  "N_cwv_n" = "Leaf nitrogen content \n per leaf dry mass variance",
-  "SLA_cwv_n" = "Specific leaf area variance",
-  "WD_cwv_n" = "Stem specific wood density variance",
-  "hmax_cwv_n" = "Asymptotic height variance"
+  "N_cwv_n" = "Leaf nitrogen content \n per leaf dry mass \n variance",
+  "SLA_cwv_n" = "Specific leaf area \n variance",
+  "WD_cwv_n" = "Stem specific wood \n density variance",
+  "hmax_cwv_n" = "Asymptotic height \n variance"
 )
 
 data_aggr |>
@@ -1699,6 +1725,11 @@ data_aggr |>
     x = "Year", y = "Index Value", color = "Plot"
   ) +
   theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = rel(0.7)),
+    axis.text.y = element_text(size = rel(0.7)),
+    strip.text = element_text(size = rel(0.7))
+  ) +
   facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
 
@@ -1747,15 +1778,22 @@ data_aggr <-
   rbind(data_aggr)
 ```
 
-To describe the variation and structure of traits within communities, we we use the above functional traits `r traits_used` to calculate multiple complementary functional diversity indices. These indices capture different dimensions of diversity within trait space, based on species’ positions and abundances:
+To describe the variation and structure of traits within communities, we used the above functional traits `r traits_used` to calculate multiple complementary functional diversity indices. These indices capture different dimensions of diversity within trait space, based on species’ positions and abundances:
 
-Functional Richness (scaled): Measures the volume of trait space occupied by the community, standardized for comparability. It reflects the range of functional strategies present, regardless of species abundance.
+### Functional Richness (scaled)
+Measures the volume of trait space occupied by the community, standardized for comparability. It reflects the range of functional strategies present, regardless of species abundance.
 
-Functional Divergence: Indicates how abundance is distributed toward the edges of trait space. Higher values suggest that dominant species are functionally distinct from the community centroid, promoting niche differentiation.
+### Functional Divergence
+Indicates how abundance is distributed toward the edges of trait space. Higher values suggest that dominant species are functionally distinct from the community centroid, promoting niche differentiation.
 
-Functional Evenness: Quantifies the regularity of species spacing and abundance distribution within trait space. High evenness implies that trait values are uniformly distributed and that resource use is balanced.
+### Functional Evenness
+Quantifies the regularity of species spacing and abundance distribution within trait space. High evenness implies that trait values are uniformly distributed and that resource use is balanced.
 
-Functional Dispersion: Represents the mean distance of individual species to the community’s trait centroid, weighted by abundance. It accounts for both the spread and distribution of traits and is sensitive to both richness and dominance.
+### Functional Dispersion
+Represents the mean distance of individual species to the community’s trait centroid, weighted by abundance. It accounts for both the spread and distribution of traits and is sensitive to both richness and dominance.
+
+The following figures represent all the above mentioned indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
+
 
 ```{r fig-functional-div}
 #| message: false
@@ -1780,6 +1818,11 @@ data_aggr |>
     x = "Year", y = "Index Value", color = "Plot"
   ) +
   theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = rel(0.7)),
+    axis.text.y = element_text(size = rel(0.7)),
+    strip.text = element_text(size = rel(0.7))
+  ) +
   facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
 
@@ -1885,6 +1928,8 @@ We characterized the size structure of the tree community using mean, minimum, m
 
 We also calculated the Gini coefficient, a widely used measure of inequality adapted to forest structure. In this context, the Gini index measures inequality in stem diameters within a plot: A Gini index of 0 indicates perfect equality, where all trees have the same diameter. A Gini index closer to 1 reflects high inequality, where tree size is concentrated among a few individuals.
 
+The following figures represent all the above mentioned indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
+
 ```{r display-structural-div}
 #| message: false
 #| warning: false
@@ -1907,12 +1952,19 @@ data_aggr |>
     x = "Year", y = "Index Value", color = "Plot"
   ) +
   theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = rel(0.7)),
+    axis.text.y = element_text(size = rel(0.7)),
+    strip.text = element_text(size = rel(0.7))
+  ) +
   facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
 
 ### Stem abundance
 
 To capture temporal changes in forest structure, we calculated the stem abundance, as well as the recruiment and mortality.
+
+The following figures represent the stem abundances and demographic rates. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
 
 ```{r stem-abundance}
 #| message: false
@@ -1972,12 +2024,19 @@ data_aggr |>
     x = "Year", y = "Index Value", color = "Plot"
   ) +
   theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = rel(0.7)),
+    axis.text.y = element_text(size = rel(0.7)),
+    strip.text = element_text(size = rel(0.7))
+  ) +
   facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
 
 ### Basal Area (BA)
 
 In addition, we assessed basal area (BA) and above-ground biomass (AGB) stocks, as well as the BA and AGB contributions in recruitment, growth and mortality, to track structural development and resource accumulation.
+
+The following figures represent the different BAand AGB related indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
 
 ```{r ba}
 #| message: false
@@ -2065,12 +2124,17 @@ data_aggr |>
     x = "Year", y = "Index Value", color = "Plot"
   ) +
   theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = rel(0.7)),
+    axis.text.y = element_text(size = rel(0.7)),
+    strip.text = element_text(size = rel(0.7))
+  ) +
   facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
 
 ### Aboveground biomass (AGB)
 
-We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground biomass.
+We used equation 7 from Chave et al. (2014) to estimate tree-level aboveground biomass.
 
 ```{r add-wd}
 #| message: false
@@ -2193,8 +2257,17 @@ data_aggr |>
     x = "Year", y = "Index Value", color = "Plot"
   ) +
   theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = rel(0.7)),
+    axis.text.y = element_text(size = rel(0.7)),
+    strip.text = element_text(size = rel(0.7))
+  ) +
   facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
 ```
+
+# Conclusion
+
+All the aggregated data generated is stored in a csv file, which will further be used for analysis in the Bioforest project.
 
 ```{r save-aggregated-data}
 data_aggr |>
