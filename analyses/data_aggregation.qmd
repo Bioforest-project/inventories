@@ -7,7 +7,7 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: manare
+  site: pad-limo-2-barracos
   taper: false
 
 execute:
@@ -139,12 +139,20 @@ data_cor <- data_cor |>
   left_join(data_species, by = c("raw_taxonomy"))
 ```
 
+```{r complete-data}
+data_cor <- data_cor |>
+  # add UPA info in Mil
+  mutate(Plot = ifelse(Site == "Mil", paste0("UPA_B_", Plot), Plot)) |>
+  # in Iracema, one value has missing Site name
+  mutate(Site = ifelse(is.na(Site), names(sort(table(data_raw$Site)))[1], Site))
+```
+
 ```{r remove-values}
 #| message: false
 #| warning: false
 # some values (partial censuses, etc) need to be removed in some sites
 text <- ""
-if (any(data_raw$Site == "Paracou")) {
+if (any(data_cor$Site == "Paracou")) {
   data_cor <- data_cor |>
     subset(!(Site == "Paracou" & as.numeric(Plot) == 16)) |>
     subset(!(Site == "Paracou" & (Year %in% c(1996, 1998, 2000, 2002)))) |>
@@ -155,7 +163,7 @@ if (any(data_raw$Site == "Paracou")) {
     "and census year 2010 of plot 15 (25% of the plot was not measured)."
   )
 }
-if (any(data_raw$Site == "Malinau")) {
+if (any(data_cor$Site == "Malinau")) {
   data_cor <- data_cor |>
     subset(!(Site == "Malinau" & Year == 2012))
   text <- paste(
@@ -171,12 +179,13 @@ if (any(data_raw$Site == "Malinau")) {
 #| message: false
 #| warning: false
 # download from google drive
-if (!file.exists("data/raw_data/bioforest-plot-information.csv")) {
+path_metadata <- "data/raw_data/bioforest-plot-information"
+if (!file.exists(paste0(path_metadata, ".csv"))) {
   googledrive::drive_get(
     googledrive::as_id("1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ")
   ) |>
     googledrive::drive_download(
-      path = "data/raw_data/bioforest-plot-information",
+      path = path_metadata,
       type = "csv", overwrite = TRUE
     )
 }
@@ -185,15 +194,17 @@ if (!file.exists("data/raw_data/bioforest-plot-information.csv")) {
 ```{r add-e-var}
 #| message: false
 #| warning: false
-#| eval: false
+
 # add E variable for AGB allometry (from Chave et al 2014)
-read.csv("data/raw_data/bioforest-plot-information.csv") |>
-  mutate(e = computeE(cbind(longitude, latitude))) |>
-  write.csv("data/raw_data/bioforest-plot-information.csv", row.names = FALSE)
+if (!"e" %in% colnames(read.csv(paste0(path_metadata, ".csv")))) {
+  read.csv(paste0(path_metadata, ".csv")) |>
+    mutate(e = computeE(cbind(longitude, latitude))) |>
+    write.csv(paste0(path_metadata, ".csv"), row.names = FALSE)
+}
 ```
 
 ```{r get-plot-level-data}
-plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
+plot_information <- read.csv(paste0(path_metadata, ".csv")) |>
   mutate(site = as.character(site)) |>
   rename(site_raw = site) |>
   left_join(sites) |>
@@ -699,7 +710,8 @@ If we find duplicates, only the first observation is retained in the data.
 #| message: false
 #| warning: false
 data_cor <- data_cor |>
-  mutate(IdStem = paste(Site, Plot, Subplot, IdTree, IdStem, sep = "_"))
+  mutate(IdTree = paste(Site, Plot, Subplot, IdTree, sep = "_")) |>
+  mutate(IdStem = paste(IdTree, IdStem, sep = "_"))
 ```
 
 ```{r get-stem-id-iwokrama}
@@ -989,131 +1001,38 @@ We want to now ensure that individuals have the same scientific name across cens
 ```{r one-sp-per-tree}
 #| message: false
 #| warning: false
-nb_sp_tree <- data_cor %>%
+
+duplicated_species <- data_cor %>%
   group_by(IdTree) %>%
-  summarise(nbsp = length(unique(scientific_cleaned)))
+  summarise(
+    nbsp = n_distinct(scientific_cleaned, na.rm = TRUE),
+    nbsp_na = n_distinct(scientific_cleaned, na.rm = FALSE)
+  )
 
-data_cor <- data_cor %>% mutate(
-  ScientificName_cor = as.character(NA),
-  SpName_codecor = as.factor(NA)
-)
-
-# when there is just one scientific name for all the observation of a given tree
-tree_no_cor <- nb_sp_tree %>% filter(nbsp == 1)
-# use the ScientificNames as the corrected one
 data_cor <- data_cor %>%
-  mutate(ScientificName_cor = ifelse(IdTree %in% tree_no_cor$IdTree,
-    scientific_cleaned,
-    ScientificName_cor
-  ))
-# fill in the code_cor
-data_cor <- data_cor %>%
-  mutate(SpName_codecor = ifelse(IdTree %in% tree_no_cor$IdTree,
-    "no_cor",
-    SpName_codecor
-  ))
+  group_by(IdTree) %>%
+  arrange(Year) %>%
+  mutate(scientific_cleaned = last(scientific_cleaned, na_rm = TRUE)) %>%
+  ungroup()
 
-# When there are two scientific names
-tree_2_sp <- nb_sp_tree %>% filter(nbsp == 2)
-for (i in tree_2_sp$IdTree) {
-  names2 <- data_cor %>%
-    filter(IdTree == i) %>%
-    reframe(names = unique(scientific_cleaned))
-  if (any(is.na(names2))) { # if one of the two names is NA
-    data_cor <- data_cor %>%
-      mutate(ScientificName_cor = ifelse(IdTree == i,
-        ifelse(
-          is.na(scientific_cleaned), # if NA in Scientific name
-          names2[!is.na(names2)], # we use the name of the other obs
-          scientific_cleaned
-        ), # otherwise, use the name of the current obs
-        ScientificName_cor
-      )) # do nothing if not the tree of interest
-    # fill in the code_cor
-    data_cor <- data_cor %>%
-      mutate(SpName_codecor = ifelse(IdTree == i,
-        ifelse(
-          is.na(scientific_cleaned), # if NA in Scientific name
-          "gapfilled",
-          "no_cor"
-        ),
-        SpName_codecor
-      )) # do nothing if not the tree of interest
-  } else { # if none of the two names are NA
-    data_cor <- data_cor %>%
-      mutate(ScientificName_cor = ifelse(IdTree == i,
-        NA, # put NA as we don't know which one is the good one
-        ScientificName_cor
-      ))
-    # fill in the code_cor
-    data_cor <- data_cor %>%
-      mutate(SpName_codecor = ifelse(IdTree == i,
-        "more than one scientific name",
-        SpName_codecor
-      ))
-  }
-}
-
-# when there are more than two scientific name for a given tree
-tree_many_sp <- nb_sp_tree %>% filter(nbsp > 2)
-# replace the name by NA (as we don't know which one is the good one
-data_cor <- data_cor %>%
-  mutate(ScientificName_cor = ifelse(IdTree %in% tree_many_sp,
-    NA,
-    ScientificName_cor
-  ))
-# fill in the code_cor
-data_cor <- data_cor %>%
-  mutate(SpName_codecor = ifelse(IdTree %in% tree_many_sp,
-    "more than one scientific name",
-    SpName_codecor
-  ))
-```
-
-```{r text-sp-dupl}
-#| message: false
-#| warning: false
-if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
+if (all(duplicated_species$nbsp_na < 2)) { # no duplicated names
   text <- paste(
     "There was always only one scientific name for a given individual (or",
     "always a NA). No change has been made."
   )
-} else { # if some correction have been made
-  nb_filled <- data_cor %>%
-    filter(SpName_codecor == "gapfilled") %>%
-    count()
-  nb_prob <- data_cor %>%
-    filter(SpName_codecor == "more than one scientific name") %>%
-    count()
-  if (nb_filled != 0) {
-    text1 <- paste(
-      "There were",
-      nb_filled,
-      "observations with NA in the Scientific names,
-                   but for which other observations of the same trees
-                   have a unique scientific name.
-                   These case were gapfilled by putting the scientific name
-                   of the other observations in ScientificName_cor. The
-                   value in SpName_codecor is 'gapfilled'."
-    )
-  } else {
-    text1 <- ""
-  }
-  if (nb_prob != 0) {
-    text2 <- paste(
-      "There were",
-      nb_prob,
-      "observations of individuals with at least 2 different (non NA)
-                   scientific names.
-                   As we cannot know which is correct,
-                   all observations of the given individuals are set to NA.
-                   The value in SpName_codecor
-      is 'more than one scientific name.`"
-    )
-  } else {
-    text2 <- ""
-  }
-  text <- paste(text1, "\n", text2)
+} else {
+  # if some correction have been made
+  text <- paste(
+    "There were",
+    with(duplicated_species, sum(nbsp_na == 2 & nbsp == 1)),
+    "observations with NA in the scientific names, but with a unique",
+    "(non-NA) scientific name.",
+    "There were",
+    sum(duplicated_species$nbsp > 1),
+    "observations with more than one non-NA scientific name.",
+    "In all these cases, we used the last non-NA scientific name recorded",
+    "for each tree."
+  )
 }
 ```
 
