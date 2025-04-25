@@ -361,38 +361,40 @@ The following figures show the location of each plot as indicated by you in the 
 #| message: false
 #| warning: false
 
-# Maps per plot and per census
-map <- ggplot(data_cor, aes(
-  x = longitude, y = latitude,
-  color = as.factor(Plot)
-)) +
-  geom_point(alpha = 0.6, show.legend = FALSE) +
-  # facet_wrap(~ Year) +
-  labs(
-    title = "Map of Plots",
-    x = "Longitude",
-    y = "Latitude",
-    color = "Plot ID"
-  ) +
-  coord_equal() +
-  theme_minimal()
-
-plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
-  geom_point(alpha = 0.6, show.legend = FALSE) +
-  scale_y_discrete(breaks = c(
-    min(data_cor$Plot),
-    median(data_cor$Plot),
-    max(data_cor$Plot)
+if (params$print) {
+  # Maps per plot and per census
+  map <- ggplot(data_cor, aes(
+    x = longitude, y = latitude,
+    color = as.factor(Plot)
   )) +
-  labs(
-    title = "Plots censused across years",
-    x = "Year",
-    y = "Plot number",
-    color = "Plot ID"
-  ) +
-  theme_minimal()
+    geom_point(alpha = 0.6, show.legend = FALSE) +
+    # facet_wrap(~ Year) +
+    labs(
+      title = "Map of Plots",
+      x = "Longitude",
+      y = "Latitude",
+      color = "Plot ID"
+    ) +
+    coord_equal() +
+    theme_minimal()
 
-(map + plots)
+  plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
+    geom_point(alpha = 0.6, show.legend = FALSE) +
+    scale_y_discrete(breaks = c(
+      min(data_cor$Plot),
+      median(data_cor$Plot),
+      max(data_cor$Plot)
+    )) +
+    labs(
+      title = "Plots censused across years",
+      x = "Year",
+      y = "Plot number",
+      color = "Plot ID"
+    ) +
+    theme_minimal()
+
+  (map + plots)
+}
 ```
 
 ## Taxonomic identification
@@ -486,21 +488,21 @@ If you notice an inconsistency in this information, please let us know.
 ```{r display-taxo-resolution}
 #| message: false
 #| warning: false
+#| fig.width: 10
+#| fig.height: 8
+
 plot_data <- data_cor |>
   group_by(Site, Plot, Year) |>
   summarise(
-    pundet = sum(is.na(genus_cleaned)) / length(genus_cleaned),
-    pgenus = sum(!is.na(genus_cleaned) & is.na(species_cleaned))
+    Undetermined = sum(is.na(genus_cleaned)) / length(genus_cleaned),
+    `Genus Only` = sum(!is.na(genus_cleaned) & is.na(species_cleaned))
     / length(genus_cleaned),
-    pspecies = sum(!is.na(species_cleaned)) / length(species_cleaned)
+    Species = sum(!is.na(species_cleaned)) / length(species_cleaned)
   ) |>
-  pivot_longer(cols = c("pundet", "pgenus", "pspecies"))
-
-plot_data$name <- recode(plot_data$name,
-  pundet = "Undetermined",
-  pgenus = "Genus Only",
-  pspecies = "Species"
-)
+  pivot_longer(cols = c("Undetermined", "Genus Only", "Species")) |>
+  mutate(
+    name = factor(name, levels = c("Undetermined", "Genus Only", "Species"))
+  )
 
 # Count number of unique plots
 n_plots <- length(unique(plot_data$Plot))
@@ -518,18 +520,21 @@ height_per_row <- 5
 plot_height <- nrow_facets * height_per_row
 
 # Create plot
-ggplot(plot_data, aes(Year, value, fill = name)) +
+ggplot(plot_data, aes(as.character(Year), value, fill = name)) +
   geom_col() +
-  facet_wrap(~Plot, scales = "free_y", ncol = ncol_facets) +
+  facet_wrap(~Plot,
+    scales = "free_y", ncol = ncol_facets,
+    labeller = label_both
+  ) +
   scale_y_continuous(breaks = c(0, 0.5, 1)) +
   labs(fill = "ID level", title = "Proportion of taxonomic ID resolution") +
+  labs(x = NULL, y = NULL) +
   theme_minimal() +
   theme(legend.position = "bottom") +
   theme(
-    axis.text.x = element_text(size = rel(0.7)),
-    axis.text.y = element_text(size = rel(0.7)),
-    strip.text = element_text(size = rel(0.7))
-  )
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+  ) +
+  scale_fill_manual(values = c("#D53E4F", "#FEE08B", "#3288BD"))
 ```
 
 # Check data consistency
