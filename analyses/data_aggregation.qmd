@@ -27,6 +27,7 @@ library(tidyverse)
 library(entropart)
 library(fundiversity)
 library(patchwork)
+library(readxl)
 ```
 
 # Introduction
@@ -83,11 +84,6 @@ if (length(data_list) == 0) {
   stop("Please check that the site name in params matches your data file name.")
 }
 
-# importing site names corrections table
-sites <- read.csv("data/raw_data/site_name_correction.csv") |>
-  separate_rows(site_raw, sep = ",") |>
-  unique()
-
 # creating a taxonomic ID to use for joining wrong and corrected taxa
 read_harmonized <- function(file) {
   cols <- c(
@@ -139,19 +135,48 @@ data_cor <- data_raw
 #| warning: false
 data_species <-
   read_tsv("data/derived_data/taxonomy_v4.tsv") |>
-  # select(contains("cleaned") | "tax_id" | "file") |>
+  select(contains("cleaned") | "raw_taxonomy") |>
   unique()
 
 data_cor <- data_cor |>
   left_join(data_species, by = c("raw_taxonomy"))
 ```
 
-```{r complete-data}
+```{r complete-plotarea-data}
+# add site if missing
+data_cor <- data_cor |>
+  mutate(Site = ifelse(is.na(Site), names(sort(table(data_raw$Site)))[1], Site))
+
+# add missing plot area
+plot_area <- data_cor |>
+  select(Site, Plot, PlotArea) |>
+  drop_na() |>
+  unique()
+
+if (any(duplicated(with(plot_area, paste(Site, Plot))))) {
+  stop(paste(
+    "The plot area information in your data is inconsistent:",
+    "some plots have different values."
+  ))
+}
+
+data_cor <- data_cor |>
+  select(-PlotArea) |>
+  left_join(plot_area, by = c("Site", "Plot"))
+
+if (any(is.na(data_cor$PlotArea))) {
+  stop(paste("Some plots are missing PlotArea values."))
+}
+
+if (any(data_cor$PlotArea <= 0)) {
+  stop(paste("Some PlotArea values are zero or negative."))
+}
+```
+
+```{r complete-other-data}
 data_cor <- data_cor |>
   # add UPA info in Mil
-  mutate(Plot = ifelse(Site == "Mil", paste0("UPA_B_", Plot), Plot)) |>
-  # in Iracema, one value has missing Site name
-  mutate(Site = ifelse(is.na(Site), names(sort(table(data_raw$Site)))[1], Site))
+  mutate(Plot = ifelse(Site == "Mil", paste0("UPA_B_", Plot), Plot))
 
 # add census year when missing
 if (anyNA(data_cor$Year)) {
@@ -160,7 +185,7 @@ if (anyNA(data_cor$Year)) {
     drop_na() |>
     unique() |>
     mutate(Year_Census = median(Year)) |>
-    merge(data_cor, all.y = TRUE) |>
+    right_join(data_cor) |>
     mutate(Year = ifelse(is.na(Year), Year_Census, Year)) |>
     mutate(Year_Census = NULL)
 }
@@ -194,86 +219,54 @@ if (any(data_cor$Site == "Malinau")) {
 
 `r text`
 
-```{r add-plot-level-data}
-#| message: false
-#| warning: false
-# download from google drive
-path_metadata <- "data/raw_data/bioforest-plot-information"
-if (!file.exists(paste0(path_metadata, ".csv"))) {
-  googledrive::drive_get(
-    googledrive::as_id("1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ")
-  ) |>
-    googledrive::drive_download(
-      path = path_metadata,
-      type = "csv", overwrite = TRUE
-    )
-}
-```
-
-```{r add-e-var}
-#| message: false
-#| warning: false
-
-# add E variable for AGB allometry (from Chave et al 2014)
-if (!"e" %in% colnames(read.csv(paste0(path_metadata, ".csv")))) {
-  read.csv(paste0(path_metadata, ".csv")) |>
-    mutate(e = computeE(cbind(longitude, latitude))) |>
-    write.csv(paste0(path_metadata, ".csv"), row.names = FALSE)
-}
-```
-
 ```{r get-plot-level-data}
 #| message: false
 #| warning: false
-plot_information <- read.csv(paste0(path_metadata, ".csv")) |>
-  mutate(site = as.character(site)) |>
-  rename(site_raw = site) |>
-  left_join(sites) |>
-  select(-site_raw) |>
-  subset(site %in% unique(data_cor$Site))
+# download from google drive
+path_metadata <- "data/raw_data/bioforest-plot-information.csv"
+if (!file.exists(path_metadata)) {
+  "1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ" |>
+    googledrive::as_id() |>
+    googledrive::drive_get() |>
+    googledrive::drive_download(
+      path = "data/raw_data/bioforest-plot-information.xlsx",
+      overwrite = TRUE
+    )
+
+  sites <- "data/raw_data/bioforest-plot-information.xlsx" |>
+    read_excel(sheet = "site_name_correction") |>
+    separate_rows(site_raw, sep = ",") |>
+    unique()
+
+  # clean plot information
+  "data/raw_data/bioforest-plot-information.xlsx" |>
+    read_excel(sheet = "Sheet1") |>
+    # change site name to correspond to raw data
+    mutate(site = as.character(site)) |>
+    rename(site_raw = site) |>
+    left_join(sites) |>
+    select(-site_raw) |>
+    # remove "subplot" from Tene data
+    mutate(plot = gsub("Subplot_", "", plot)) |>
+    # add E variable for AGB allometry (from Chave et al 2014)
+    mutate(e = computeE(cbind(longitude, latitude))) |>
+    write.csv(path_metadata, row.names = FALSE)
+}
 ```
 
-```{r add-missing-plot-coordinates}
+```{r join-plot-information}
 #| message: false
 #| warning: false
-# temporarily add plot information when missing online
-plot_information <- plot_information |>
-  # temporary: some plots in MBaiki have the switched coordinates
-  mutate(
-    latitude_cor = ifelse(site == "Mbaiki" & latitude > 4, longitude, latitude),
-    longitude_cor = ifelse(site == "Mbaiki" & latitude > 4, latitude, longitude)
-  ) |>
-  # remove "subplot" from Tene data
-  mutate(plot = gsub("Subplot_", "", plot))
-```
 
-```{r harmonize-treatment-info}
-#| message: false
-#| warning: false
-# harmonize treatment information as logging and silvicultural treatments (T/F)
-control_string <- "control"
-silv_string <- "treatment|devital|thinning"
-plot_information <- plot_information |>
-  mutate(
-    Treatment = ifelse(Treatment != "", Treatment, NA),
-    logging = !grepl(control_string, tolower(Treatment)),
-    silv_treat = grepl(silv_string, tolower(Treatment))
-  ) |>
-  ## remove plots that don't have coordinates and treatment information
-  subset(!is.na(longitude)) |>
-  select(site, plot, longitude, latitude, logging, silv_treat, e, Treatment)
-```
+plot_information <- read.csv(path_metadata)
 
-```{r remove-plots-without-coords}
-#| message: false
-#| warning: false
 # plots that are not on the online document
 data_missing <- data_cor |>
   mutate(site = Site, plot = Plot) |>
-  select(site, plot, PlotArea) |>
+  select(site, plot) |>
   unique() |>
-  merge(plot_information, all = TRUE) |>
-  subset(is.na(longitude) | is.na(PlotArea)) |>
+  merge(plot_information, all.x = TRUE) |>
+  subset(is.na(longitude)) |>
   mutate(idplot = paste(site, plot, sep = "-"))
 
 # for sao nicolau, get the treatment information in the file name and add it to
@@ -293,8 +286,22 @@ plot_information <- plot_information |>
 # add plot-level information to the table
 data_cor <- data_cor |>
   merge(plot_information,
-    by.x = c("Site", "Plot"), by.y = c("site", "plot"), all.x = TRUE
+    by.x = c("Site", "Plot"), by.y = c("site", "plot"),
+    all.x = TRUE
   )
+
+# if no plots were found in the online document
+if (all(is.na(data_cor$e))) {
+  stop(paste0(
+    "Please check the information (site name, plot names and coordinates) ",
+    "on the online document: https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link" # nolint
+  ))
+}
+
+# if some plots have coordinates but not all: use mean value of E for plots with
+# missing coordiantes
+data_cor <- data_cor |>
+  mutate(e = ifelse(is.na(e), mean(data_cor$e, na.rm = TRUE), e))
 
 missing <- paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")
 
@@ -307,17 +314,9 @@ text <- ifelse(
   ),
   "All plots in the dataset have coordinates."
 )
-
-data_cor <- data_cor |>
-  mutate(e = ifelse(is.na(e), mean(data_cor$e, na.rm = TRUE), e))
-
-if (sum(!is.na(data_cor$e)) == 0) {
-  stop(paste0(
-    "Please check the information (coordinates and treatment) ",
-    "on the online document: https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link" # nolint
-  ))
-}
 ```
+`r text`
+
 
 # General presentation of the data
 
@@ -890,9 +889,9 @@ data_nstem <- data_cor |>
   summarise(nstem = length(unique(IdStem)))
 if (all(data_nstem$nstem == 1)) {
   text <- paste(
-    "In this dataset, the number of stem identifiers and the number of tree identifiers are",
-    "equal, suggesting either that there are no multi-stemmed trees, or",
-    "that the multiple stems are considered as different individuals."
+    "In this dataset, the number of stem identifiers and the number of tree",
+    "identifiers are equal, suggesting either that there are no multi-stemmed",
+    "trees, or that the multiple stems are considered as different individuals."
   )
 } else {
   text <- "In this dataset, the following trees have multiple stems:"
