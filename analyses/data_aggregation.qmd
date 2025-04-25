@@ -491,50 +491,52 @@ If you notice an inconsistency in this information, please let us know.
 #| fig.width: 10
 #| fig.height: 8
 
-plot_data <- data_cor |>
-  group_by(Site, Plot, Year) |>
-  summarise(
-    Undetermined = sum(is.na(genus_cleaned)) / length(genus_cleaned),
-    `Genus Only` = sum(!is.na(genus_cleaned) & is.na(species_cleaned))
-    / length(genus_cleaned),
-    Species = sum(!is.na(species_cleaned)) / length(species_cleaned)
-  ) |>
-  pivot_longer(cols = c("Undetermined", "Genus Only", "Species")) |>
-  mutate(
-    name = factor(name, levels = c("Undetermined", "Genus Only", "Species"))
-  )
+if (params$print) {
+  plot_data <- data_cor |>
+    group_by(Site, Plot, Year) |>
+    summarise(
+      Undetermined = sum(is.na(genus_cleaned)) / length(genus_cleaned),
+      `Genus Only` = sum(!is.na(genus_cleaned) & is.na(species_cleaned))
+      / length(genus_cleaned),
+      Species = sum(!is.na(species_cleaned)) / length(species_cleaned)
+    ) |>
+    pivot_longer(cols = c("Undetermined", "Genus Only", "Species")) |>
+    mutate(
+      name = factor(name, levels = c("Undetermined", "Genus Only", "Species"))
+    )
 
-# Count number of unique plots
-n_plots <- length(unique(plot_data$Plot))
+  # Count number of unique plots
+  n_plots <- length(unique(plot_data$Plot))
 
-# Set number of columns in facet_wrap
-ncol_facets <- 4
+  # Set number of columns in facet_wrap
+  ncol_facets <- 4
 
-# Calculate number of rows (ceiling to account for remainder)
-nrow_facets <- ceiling(n_plots / ncol_facets)
+  # Calculate number of rows (ceiling to account for remainder)
+  nrow_facets <- ceiling(n_plots / ncol_facets)
 
-# Set height per row (e.g., 3 inches per row)
-height_per_row <- 5
+  # Set height per row (e.g., 3 inches per row)
+  height_per_row <- 5
 
-# Final plot height
-plot_height <- nrow_facets * height_per_row
+  # Final plot height
+  plot_height <- nrow_facets * height_per_row
 
-# Create plot
-ggplot(plot_data, aes(as.character(Year), value, fill = name)) +
-  geom_col() +
-  facet_wrap(~Plot,
-    scales = "free_y", ncol = ncol_facets,
-    labeller = label_both
-  ) +
-  scale_y_continuous(breaks = c(0, 0.5, 1)) +
-  labs(fill = "ID level", title = "Proportion of taxonomic ID resolution") +
-  labs(x = NULL, y = NULL) +
-  theme_minimal() +
-  theme(legend.position = "bottom") +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
-  ) +
-  scale_fill_manual(values = c("#D53E4F", "#FEE08B", "#3288BD"))
+  # Create plot
+  ggplot(plot_data, aes(as.character(Year), value, fill = name)) +
+    geom_col() +
+    facet_wrap(~Plot,
+      scales = "free_y", ncol = ncol_facets,
+      labeller = label_both
+    ) +
+    scale_y_continuous(breaks = c(0, 0.5, 1)) +
+    labs(fill = "ID level", title = "Proportion of taxonomic ID resolution") +
+    labs(x = NULL, y = NULL) +
+    theme_minimal() +
+    theme(legend.position = "bottom") +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+    ) +
+    scale_fill_manual(values = c("#D53E4F", "#FEE08B", "#3288BD"))
+}
 ```
 
 # Check data consistency
@@ -626,6 +628,7 @@ missing_values %>%
 ```{r remove-na-zero-dbh}
 #| message: false
 #| warning: false
+
 data_cor <- data_cor |>
   subset(Diameter > 0 & !is.na(Diameter))
 ```
@@ -673,11 +676,10 @@ if (length(unique(data_cor$MinDBH)) == 1) {
 ```{r print-dbh-cutoff}
 #| message: false
 #| warning: false
-if (length(unique(data_cor$MinDBH)) != 1) {
+if (length(unique(data_cor$MinDBH)) != 1 & params$print) {
   data_cor %>%
     group_by(Site, Plot, IdCensus) %>%
     summarise(dbhcut = unique(MinDBH)) %>%
-    # pivot_wider(names_from = Plot, values_from = dbhcut) %>%
     knitr::kable()
 }
 ```
@@ -800,8 +802,10 @@ if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
   nb_stem_plot_bis <- data_cor %>%
     count(IdStem, IdCensus)
 } else { # if no duplicated rows
-  text <- "We checked for true duplicates (fully identical rows), and there are
-  none in this dataset."
+  text <- paste(
+    "We checked for true duplicates (fully identical rows), and",
+    "there are none in this dataset."
+  )
 }
 ```
 
@@ -938,8 +942,6 @@ We want to ensure that this dataset contains only live trees, so we carry out 2 
 
 ### Remove dead trees
 
-The first step is to remove all the dead individuals if there is a column called "LifeStatus". We keep the rows with the character strings: TRUE, NA, "Normal", "Recruit", and the numbers 1,2,3,4. If your dataset has any other code to represent live/dead trees, please let us know.
-
 ```{r remove-dead}
 #| message: false
 #| warning: false
@@ -965,7 +967,6 @@ if ("LifeStatus" %in% colnames(data_cor)) {
   }
 
   data_cor <- data_cor |> subset(LifeStatus %in% alive)
-  # TODO: ask for life status codes per site?
 } else {
   text <- paste(
     "In this dataset, there was no column 'LifeStatus' with information about",
@@ -974,6 +975,8 @@ if ("LifeStatus" %in% colnames(data_cor)) {
   )
 }
 ```
+
+The first step is to remove all the dead individuals if there is a column called "LifeStatus". We keep the rows with the character strings: `r paste(alive, collapse = ", ")`. If your dataset has any other code to represent live/dead trees, please let us know.
 
 `r text`
 
@@ -1215,15 +1218,15 @@ if (sum(is.na(data_cor$Diameter)) > 0) {
 ```{r fig-interpolate, fig.height=7, fig.width=11}
 #| message: false
 #| warning: false
-if (sum(is.na(data_cor$Diameter)) > 0) {
+if (sum(is.na(data_cor$Diameter)) > 0 & params$print) {
   illustration <- sample(
     subset(data_cor, is.na(Diameter))$IdStem,
     min(stem_missing, 12)
   )
   subset(data_cor, IdStem %in% illustration) |>
-    separate(Plot, c(NA, "plot_label", NA), sep = "-", remove = FALSE) |>
+    separate(IdTree, c(NA, NA, NA, "IdTree"), sep = "_") |>
     mutate(label = paste0(
-      "Plot: ", plot_label, "_", Subplot,
+      "Plot: ", Plot, "_", Subplot,
       ", treeID: ", IdTree, "\n Species: ", scientific_cleaned
     )) |>
     ggplot(aes(x = Year, y = diameter_cor)) +
@@ -1355,10 +1358,11 @@ if (sum(data_cor$outlier) > 0) {
 
 ```{r dbh-change-fig}
 #| warning: false
+#| message: false
 #| fig.height: 7
 #| fig.width: 11
 
-if (sum(data_cor$outlier) > 0) {
+if (sum(data_cor$outlier) > 0 & params$print) {
   data_thresh <- data_cor |>
     subset(!is.na(sp_group)) |>
     group_by(sp_group, diam_group) |>
@@ -1409,7 +1413,7 @@ if (sum(data_cor$outlier) > 0) {
 #| fig.height: 6
 #| fig.width: 12
 
-if (sum(data_cor$outlier) > 0) {
+if (sum(data_cor$outlier) > 0 & params$print) {
   id_cor <-
     data_cor |>
     subset(outlier) |>
@@ -1422,10 +1426,10 @@ if (sum(data_cor$outlier) > 0) {
   )
   data_cor |>
     subset(IdStem %in% id_cor$id) |>
-    separate(Plot, c(NA, "plot_label", NA), sep = "-", remove = FALSE) |>
+    separate(IdTree, c(NA, NA, NA, "IdTree"), sep = "_") |>
     mutate(label = paste0(
-      "Plot: ", plot_label, "_", Subplot,
-      "\n treeID: ", IdTree, "\n", scientific_cleaned
+      "Plot: ", Plot, "_", Subplot,
+      "\ntreeID: ", IdTree, "\n", scientific_cleaned
     )) |>
     pivot_longer(cols = c("diam_growth", "diameter_cor")) |>
     ggplot(aes(x = Year)) +
