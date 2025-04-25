@@ -114,7 +114,6 @@ read_harmonized <- function(file) {
 # extracting data file and creating consistent site names
 data_raw <-
   data_list |>
-  # rbindlist(fill = TRUE, use.names = TRUE) |>
   lapply(read_harmonized) |>
   bind_rows() |>
   mutate(Site = as.character(Site)) |>
@@ -676,7 +675,7 @@ if (length(unique(data_cor$MinDBH)) == 1) {
 ```{r print-dbh-cutoff}
 #| message: false
 #| warning: false
-if (length(unique(data_cor$MinDBH)) != 1 & params$print) {
+if (length(unique(data_cor$MinDBH)) != 1 && isTRUE(params$print)) {
   data_cor %>%
     group_by(Site, Plot, IdCensus) %>%
     summarise(dbhcut = unique(MinDBH)) %>%
@@ -1218,7 +1217,7 @@ if (sum(is.na(data_cor$Diameter)) > 0) {
 ```{r fig-interpolate, fig.height=7, fig.width=11}
 #| message: false
 #| warning: false
-if (sum(is.na(data_cor$Diameter)) > 0 & params$print) {
+if (sum(is.na(data_cor$Diameter)) > 0 && isTRUE(params$print)) {
   illustration <- sample(
     subset(data_cor, is.na(Diameter))$IdStem,
     min(stem_missing, 12)
@@ -1362,7 +1361,7 @@ if (sum(data_cor$outlier) > 0) {
 #| fig.height: 7
 #| fig.width: 11
 
-if (sum(data_cor$outlier) > 0 & params$print) {
+if (sum(data_cor$outlier) > 0 && isTRUE(params$print)) {
   data_thresh <- data_cor |>
     subset(!is.na(sp_group)) |>
     group_by(sp_group, diam_group) |>
@@ -1413,7 +1412,7 @@ if (sum(data_cor$outlier) > 0) {
 #| fig.height: 6
 #| fig.width: 12
 
-if (sum(data_cor$outlier) > 0 & params$print) {
+if (sum(data_cor$outlier) > 0 && isTRUE(params$print)) {
   id_cor <-
     data_cor |>
     subset(outlier) |>
@@ -1575,41 +1574,71 @@ neutral_div_gen <- data_cor %>%
 data_aggr <- data_aggr %>%
   rbind(neutral_div_sp) %>%
   rbind(neutral_div_gen)
+```
+
+
+```{r neutral-diversity-fig}
+#| message: false
+#| warning: false
+#| fig.height: 6
+#| fig.width: 8
 
 # Plot temporal trajectories of different indices across plots
-data_aggr %>%
-  subset(variable %in% neutral_div_sp$variable) %>%
-  ggplot(aes(x = Year, y = value, color = as.factor(Plot))) +
-  geom_line(show.legend = FALSE) +
-  geom_point(show.legend = FALSE) +
-  facet_wrap(~variable, scales = "free_y") +
-  labs(
-    title = "Diversity Indices Across Plots and Years - Species level",
-    x = "Year", y = "Index Value", color = "Plot"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(size = rel(0.7)),
-    axis.text.y = element_text(size = rel(0.7)),
-    strip.text = element_text(size = rel(0.7))
+if (isTRUE(params$print)) {
+  labs_vars <- c(
+    coverage = "Coverage",
+    diversity_q0 = "Richness",
+    diversity_q1 = "Shannon Diversity",
+    diversity_q2 = "Simpson Diversity",
+    evenness = "Evenness"
   )
 
-data_aggr %>%
-  subset(variable %in% neutral_div_gen$variable) %>%
-  ggplot(aes(x = Year, y = value, color = as.factor(Plot))) +
-  geom_line(show.legend = FALSE) +
-  geom_point(show.legend = FALSE) +
-  facet_wrap(~variable, scales = "free_y") +
-  labs(
-    title = "Diversity Indices Across Plots and Years - Genus level",
-    x = "Year", y = "Index Value", color = "Plot"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(size = rel(0.7)),
-    axis.text.y = element_text(size = rel(0.7)),
-    strip.text = element_text(size = rel(0.7))
-  )
+  data_aggr %>%
+    subset(variable %in% neutral_div_sp$variable) %>%
+    mutate(variable = factor(gsub("_sp", "", variable),
+      levels = c(
+        paste0("diversity_q", 0:2),
+        "evenness", "coverage"
+      )
+    )) %>%
+    ggplot(aes(x = Year, y = value, color = as.factor(Plot))) +
+    geom_line(show.legend = FALSE) +
+    geom_point(show.legend = (length(unique(data_aggr$Plot)) <= 28)) +
+    facet_wrap(~variable,
+      scales = "free_y",
+      labeller = labeller(variable = labs_vars)
+    ) +
+    labs(
+      title = "Diversity Indices Across Plots and Years - Species level",
+      x = NULL, y = NULL, color = "Plot"
+    ) +
+    theme_minimal() +
+    theme(legend.position = c(0.82, 0.15)) +
+    guides(col = guide_legend(nrow = 6))
+
+  data_aggr %>%
+    subset(variable %in% neutral_div_gen$variable) %>%
+    mutate(variable = factor(gsub("_gen", "", variable),
+      levels = c(
+        paste0("diversity_q", 0:2),
+        "evenness", "coverage"
+      )
+    )) %>%
+    ggplot(aes(x = Year, y = value, color = as.factor(Plot))) +
+    geom_line(show.legend = FALSE) +
+    geom_point(show.legend = (length(unique(data_aggr$Plot)) <= 28)) +
+    facet_wrap(~variable,
+      scales = "free_y",
+      labeller = labeller(variable = labs_vars)
+    ) +
+    labs(
+      title = "Diversity Indices Across Plots and Years - Genus level",
+      x = NULL, y = NULL, color = "Plot"
+    ) +
+    theme_minimal() +
+    theme(legend.position = c(0.82, 0.15)) +
+    guides(col = guide_legend(nrow = 6))
+}
 ```
 
 
