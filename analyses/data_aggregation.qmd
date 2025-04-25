@@ -76,6 +76,43 @@ You should have already:
 
 Note: Ensure that the character strings used in your harmonized file name exactly match those in the params section at the beginning of this file.
 
+```{r get-plot-level-data}
+#| message: false
+#| warning: false
+# download from google drive
+path_metadata <- "data/raw_data/bioforest-plot-information.csv"
+if (!file.exists(path_metadata)) {
+  "1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ" |>
+    googledrive::as_id() |>
+    googledrive::drive_get() |>
+    googledrive::drive_download(
+      path = "data/raw_data/bioforest-plot-information.xlsx",
+      overwrite = TRUE
+    )
+
+  sites <- "data/raw_data/bioforest-plot-information.xlsx" |>
+    read_excel(sheet = "site_name_correction") |>
+    separate_rows(site_raw, sep = ",") |>
+    unique()
+  write.csv(sites, file = "data/raw_data/sites.csv")
+
+  # clean plot information
+  "data/raw_data/bioforest-plot-information.xlsx" |>
+    read_excel(sheet = "Sheet1") |>
+    # change site name to correspond to raw data
+    mutate(site = as.character(site)) |>
+    rename(site_raw = site) |>
+    left_join(sites) |>
+    select(-site_raw) |>
+    # remove "subplot" from Tene data
+    mutate(plot = gsub("Subplot_", "", plot)) |>
+    # add E variable for AGB allometry (from Chave et al 2014)
+    mutate(e = computeE(cbind(longitude, latitude))) |>
+    write.csv(path_metadata, row.names = FALSE)
+}
+```
+
+
 ```{r load-data, echo=FALSE}
 #| message: false
 #| warning: false
@@ -118,7 +155,7 @@ data_raw <-
   bind_rows() |>
   mutate(Site = as.character(Site)) |>
   rename(site_raw = Site) |>
-  left_join(sites) |>
+  left_join(read.csv("data/raw_data/sites.csv")) |>
   select(-site_raw) |>
   rename(Site = site) |>
   mutate(Plot = as.character(Plot))
@@ -219,40 +256,6 @@ if (any(data_cor$Site == "Malinau")) {
 
 `r text`
 
-```{r get-plot-level-data}
-#| message: false
-#| warning: false
-# download from google drive
-path_metadata <- "data/raw_data/bioforest-plot-information.csv"
-if (!file.exists(path_metadata)) {
-  "1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ" |>
-    googledrive::as_id() |>
-    googledrive::drive_get() |>
-    googledrive::drive_download(
-      path = "data/raw_data/bioforest-plot-information.xlsx",
-      overwrite = TRUE
-    )
-
-  sites <- "data/raw_data/bioforest-plot-information.xlsx" |>
-    read_excel(sheet = "site_name_correction") |>
-    separate_rows(site_raw, sep = ",") |>
-    unique()
-
-  # clean plot information
-  "data/raw_data/bioforest-plot-information.xlsx" |>
-    read_excel(sheet = "Sheet1") |>
-    # change site name to correspond to raw data
-    mutate(site = as.character(site)) |>
-    rename(site_raw = site) |>
-    left_join(sites) |>
-    select(-site_raw) |>
-    # remove "subplot" from Tene data
-    mutate(plot = gsub("Subplot_", "", plot)) |>
-    # add E variable for AGB allometry (from Chave et al 2014)
-    mutate(e = computeE(cbind(longitude, latitude))) |>
-    write.csv(path_metadata, row.names = FALSE)
-}
-```
 
 ```{r join-plot-information}
 #| message: false
