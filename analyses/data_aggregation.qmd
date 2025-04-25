@@ -7,8 +7,9 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: iracema
+  site: misiones
   taper: false
+  print: false
 
 execute:
   echo: false      
@@ -359,6 +360,7 @@ The following figures show the location of each plot as indicated by you in the 
 ```{r maps-visual}
 #| message: false
 #| warning: false
+
 # Maps per plot and per census
 map <- ggplot(data_cor, aes(
   x = longitude, y = latitude,
@@ -367,11 +369,12 @@ map <- ggplot(data_cor, aes(
   geom_point(alpha = 0.6, show.legend = FALSE) +
   # facet_wrap(~ Year) +
   labs(
-    title = "Map of Plots by Census Year",
+    title = "Map of Plots",
     x = "Longitude",
     y = "Latitude",
     color = "Plot ID"
   ) +
+  coord_equal() +
   theme_minimal()
 
 plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
@@ -389,7 +392,7 @@ plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
   ) +
   theme_minimal()
 
-(map / plots)
+(map + plots)
 ```
 
 ## Taxonomic identification
