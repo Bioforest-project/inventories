@@ -1576,6 +1576,32 @@ data_aggr <- data_aggr %>%
   rbind(neutral_div_gen)
 ```
 
+```{r function-fig}
+aggr_fig <- function(data, vars_names, title_fig = NULL) {
+  g <- data %>%
+    subset(variable %in% names(var_names)) %>%
+    ggplot(aes(x = Year, y = value, color = as.factor(Plot))) +
+    geom_line(show.legend = FALSE) +
+    geom_point(show.legend = (length(unique(data$Plot)) <= 28)) +
+    facet_wrap(~variable,
+      scales = "free_y",
+      labeller = labeller(variable = var_names)
+    ) +
+    labs(
+      title = title_fig,
+      x = NULL, y = NULL, color = "Plot"
+    ) +
+    theme_minimal()
+
+  if (length(var_names) == 5) {
+    g + theme(legend.position = c(0.82, 0.17)) +
+      guides(col = guide_legend(nrow = 7))
+  } else {
+    g + guides(col = guide_legend(ncol = 2))
+  }
+}
+```
+
 
 ```{r neutral-diversity-fig}
 #| message: false
@@ -1585,7 +1611,7 @@ data_aggr <- data_aggr %>%
 
 # Plot temporal trajectories of different indices across plots
 if (isTRUE(params$print)) {
-  labs_vars <- c(
+  var_names <- c(
     coverage = "Coverage",
     diversity_q0 = "Richness",
     diversity_q1 = "Shannon Diversity",
@@ -1601,20 +1627,12 @@ if (isTRUE(params$print)) {
         "evenness", "coverage"
       )
     )) %>%
-    ggplot(aes(x = Year, y = value, color = as.factor(Plot))) +
-    geom_line(show.legend = FALSE) +
-    geom_point(show.legend = (length(unique(data_aggr$Plot)) <= 28)) +
-    facet_wrap(~variable,
-      scales = "free_y",
-      labeller = labeller(variable = labs_vars)
-    ) +
-    labs(
-      title = "Diversity Indices Across Plots and Years - Species level",
-      x = NULL, y = NULL, color = "Plot"
-    ) +
-    theme_minimal() +
-    theme(legend.position = c(0.82, 0.15)) +
-    guides(col = guide_legend(nrow = 6))
+    aggr_fig(var_names,
+      title_fig = paste(
+        "Diversity Indices Across Plots and Years",
+        "(Species level)"
+      )
+    )
 
   data_aggr %>%
     subset(variable %in% neutral_div_gen$variable) %>%
@@ -1624,20 +1642,12 @@ if (isTRUE(params$print)) {
         "evenness", "coverage"
       )
     )) %>%
-    ggplot(aes(x = Year, y = value, color = as.factor(Plot))) +
-    geom_line(show.legend = FALSE) +
-    geom_point(show.legend = (length(unique(data_aggr$Plot)) <= 28)) +
-    facet_wrap(~variable,
-      scales = "free_y",
-      labeller = labeller(variable = labs_vars)
-    ) +
-    labs(
-      title = "Diversity Indices Across Plots and Years - Genus level",
-      x = NULL, y = NULL, color = "Plot"
-    ) +
-    theme_minimal() +
-    theme(legend.position = c(0.82, 0.15)) +
-    guides(col = guide_legend(nrow = 6))
+    aggr_fig(var_names,
+      title_fig = paste(
+        "Diversity Indices Across Plots and Years",
+        "(Genus level)"
+      )
+    )
 }
 ```
 
@@ -1701,34 +1711,21 @@ data_aggr <- data_cor |>
 ```{r fig-functional-composition}
 #| message: false
 #| warning: false
+#| fig.height: 6
+#| fig.width: 8
 
-var_names <- c(
-  "LA_cwm_ba" = "Leaf area (mm2)",
-  "N_cwm_ba" = "Leaf nitrogen content \n per leaf dry mass \n (mg g-1)",
-  "SLA_cwm_ba" = "Specific leaf area \n (mm2 mg-1)",
-  "WD_cwm_ba" = "Stem specific wood \n density (g cm-3)",
-  "hmax_cwm_ba" = "Asymptotic height \n (m)"
-)
-
-data_aggr |>
-  subset(grepl("_cwm_ba$", variable)) |>
-  ggplot(aes(
-    x = Year, y = value, color = factor(Plot),
-    group = paste(Site, Plot)
-  )) +
-  geom_line(show.legend = FALSE) +
-  geom_point(show.legend = FALSE) +
-  labs(
-    title = "Functional Composition Across Plots and Years",
-    x = "Year", y = "Index Value", color = "Plot"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(size = rel(0.7)),
-    axis.text.y = element_text(size = rel(0.7)),
-    strip.text = element_text(size = rel(0.7))
-  ) +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "LA_cwm_n" = "Leaf area (mm2)",
+    "N_cwm_n" = "Leaf nitrogen content \n per leaf dry mass \n (mg g-1)",
+    "SLA_cwm_n" = "Specific leaf area \n (mm2 mg-1)",
+    "WD_cwm_n" = "Stem specific wood \n density (g cm-3)",
+    "hmax_cwm_n" = "Asymptotic height \n (m)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Functional composition across Plots and Years"
+  )
+}
 ```
 
 ### Functional variance
@@ -1756,33 +1753,21 @@ data_aggr <- data_cor |>
 ```{r fig-functional-var}
 #| message: false
 #| warning: false
-var_names <- c(
-  "LA_cwv_n" = "Leaf area variance",
-  "N_cwv_n" = "Leaf nitrogen content \n per leaf dry mass \n variance",
-  "SLA_cwv_n" = "Specific leaf area \n variance",
-  "WD_cwv_n" = "Stem specific wood \n density variance",
-  "hmax_cwv_n" = "Asymptotic height \n variance"
-)
+#| fig.height: 6
+#| fig.width: 8
 
-data_aggr |>
-  subset(grepl("_cwv_n$", variable)) |>
-  ggplot(aes(
-    x = Year, y = value, color = factor(Plot),
-    group = paste(Site, Plot)
-  )) +
-  geom_line(show.legend = FALSE) +
-  geom_point(show.legend = FALSE) +
-  labs(
-    title = "Functional Variance Across Plots and Years",
-    x = "Year", y = "Index Value", color = "Plot"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(size = rel(0.7)),
-    axis.text.y = element_text(size = rel(0.7)),
-    strip.text = element_text(size = rel(0.7))
-  ) +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "LA_cwv_n" = "Leaf area (mm2)",
+    "N_cwv_n" = "Leaf nitrogen content \n per leaf dry mass \n (mg g-1)",
+    "SLA_cwv_n" = "Specific leaf area \n (mm2 mg-1)",
+    "WD_cwv_n" = "Stem specific wood \n density (g cm-3)",
+    "hmax_cwv_n" = "Asymptotic height \n (m)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Variance of log-transformed Functional Traits"
+  )
+}
 ```
 
 ### Functional diversity
@@ -1850,32 +1835,20 @@ The following figures represent all the above mentioned indices. The y axis show
 ```{r fig-functional-div}
 #| message: false
 #| warning: false
-var_names <- c(
-  "FRic" = "Functional Richness (scaled)",
-  "FDiv" = "Functional Divergence",
-  "FEve" = "Functional Evenness",
-  "FDis" = "Functional Dispersion"
-)
+#| fig.height: 6
+#| fig.width: 8
 
-data_aggr |>
-  subset(grepl("^F", variable)) |>
-  ggplot(aes(
-    x = Year, y = value, color = factor(Plot),
-    group = paste(Site, Plot)
-  )) +
-  geom_line(show.legend = FALSE) +
-  geom_point(show.legend = FALSE) +
-  labs(
-    title = "Functional Indices Across Plots and Years",
-    x = "Year", y = "Index Value", color = "Plot"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(size = rel(0.7)),
-    axis.text.y = element_text(size = rel(0.7)),
-    strip.text = element_text(size = rel(0.7))
-  ) +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "FRic" = "Functional Richness (scaled)",
+    "FDiv" = "Functional Divergence",
+    "FEve" = "Functional Evenness",
+    "FDis" = "Functional Dispersion"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Functional Indices Across Plots and Years"
+  )
+}
 ```
 
 These indices provide a comprehensive understanding of how functionally diverse or redundant communities are, and how trait variability may influence ecosystem processes.
@@ -1985,31 +1958,19 @@ The following figures represent all the above mentioned indices. The y axis show
 ```{r display-structural-div}
 #| message: false
 #| warning: false
-var_names <- c(
-  "gini" = "Gini coefficient", "dbh_median" = "Median DBH (cm)",
-  "dbh_mean" = "Mean  DBH (cm))", "dbh_min" = "Min DBH (cm)",
-  "dbh_max" = "Max DBH (cm)"
-)
+#| fig.width: 8
+#| fig.height: 6
 
-data_aggr |>
-  subset(variable %in% c(
-    "gini", "dbh_median", "dbh_mean",
-    "dbh_min", "dbh_max"
-  )) |>
-  ggplot(aes(x = Year, y = value, color = factor(Plot))) +
-  geom_line(show.legend = FALSE) +
-  geom_point(show.legend = FALSE) +
-  labs(
-    title = "Structural composition Across Plots and Years",
-    x = "Year", y = "Index Value", color = "Plot"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(size = rel(0.7)),
-    axis.text.y = element_text(size = rel(0.7)),
-    strip.text = element_text(size = rel(0.7))
-  ) +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "gini" = "Gini coefficient", "dbh_median" = "Median DBH (cm)",
+    "dbh_mean" = "Mean  DBH (cm))", "dbh_min" = "Min DBH (cm)",
+    "dbh_max" = "Max DBH (cm)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Structural composition Across Plots and Years"
+  )
+}
 ```
 
 ### Stem abundance
@@ -2060,28 +2021,19 @@ data_aggr <- data_cor |>
 ```{r plot-stem}
 #| message: false
 #| warning: false
-var_names <- c(
-  "nstem" = "Stem abundance (/ha)",
-  "nstem_recr" = "Stem recruitment rate (/ha/yr)",
-  "nstem_mort" = "Stem mortality rate (/ha/yr)"
-)
+#| fig.width: 8
+#| fig.height: 3
 
-data_aggr |>
-  subset(grepl("nstem", variable)) |>
-  ggplot(aes(x = Year, y = value, color = factor(Plot))) +
-  geom_line(show.legend = FALSE) +
-  geom_point(show.legend = FALSE) +
-  labs(
-    title = "Demographic rates Across Plots and Years",
-    x = "Year", y = "Index Value", color = "Plot"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(size = rel(0.7)),
-    axis.text.y = element_text(size = rel(0.7)),
-    strip.text = element_text(size = rel(0.7))
-  ) +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "nstem" = "Stem abundance (/ha)",
+    "nstem_recr" = "Stem recruitment rate (/ha/yr)",
+    "nstem_mort" = "Stem mortality rate (/ha/yr)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Demographic rates Across Plots and Years"
+  )
+}
 ```
 
 ### Basal Area (BA)
@@ -2156,32 +2108,20 @@ data_aggr <- data_cor |>
 ```{r fig-ba}
 #| message: false
 #| warning: false
-var_names <- c(
-  "ba" = "Basal area (m2/ha)",
-  "ba_recr" = "BA recruitment (m2/ha/yr)",
-  "ba_growth" = "BA growth (m2/ha/yr)",
-  "ba_mort" = "BA mortality (m2/ha/yr)"
-)
+#| fig.width: 8
+#| fig.height: 6
 
-data_aggr |>
-  subset(grepl("^ba", variable)) |>
-  ggplot(aes(
-    x = Year, y = value, color = factor(Plot),
-    group = paste(Site, Plot)
-  )) +
-  geom_line(show.legend = FALSE) +
-  geom_point(show.legend = FALSE) +
-  labs(
-    title = "Structural Diversity Across Plots and Years",
-    x = "Year", y = "Index Value", color = "Plot"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(size = rel(0.7)),
-    axis.text.y = element_text(size = rel(0.7)),
-    strip.text = element_text(size = rel(0.7))
-  ) +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "ba" = "Basal area (m2/ha)",
+    "ba_recr" = "BA recruitment (m2/ha/yr)",
+    "ba_growth" = "BA growth (m2/ha/yr)",
+    "ba_mort" = "BA mortality (m2/ha/yr)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Basal area dynamics"
+  )
+}
 ```
 
 ### Aboveground biomass (AGB)
@@ -2289,32 +2229,20 @@ data_aggr <- data_cor |>
 ```{r fig-agb}
 #| message: false
 #| warning: false
-var_names <- c(
-  "agb" = "AGB (t/ha)",
-  "agb_recr" = "AGB recruitment (t/ha/yr)",
-  "agb_growth" = "AGB growth (t/ha/yr)",
-  "agb_mort" = "AGB mortality (t/ha/yr)"
-)
+#| fig.width: 8
+#| fig.height: 6
 
-data_aggr |>
-  subset(grepl("agb", variable)) |>
-  ggplot(aes(
-    x = Year, y = value, color = factor(Plot),
-    group = paste(Site, Plot)
-  )) +
-  geom_line(show.legend = FALSE) +
-  geom_point(show.legend = FALSE) +
-  labs(
-    title = "Structural Diversity Across Plots and Years",
-    x = "Year", y = "Index Value", color = "Plot"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(size = rel(0.7)),
-    axis.text.y = element_text(size = rel(0.7)),
-    strip.text = element_text(size = rel(0.7))
-  ) +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "agb" = "AGB (t/ha)",
+    "agb_recr" = "AGB recruitment (t/ha/yr)",
+    "agb_growth" = "AGB growth (t/ha/yr)",
+    "agb_mort" = "AGB mortality (t/ha/yr)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Aboveground biomass dynamics"
+  )
+}
 ```
 
 # Conclusion
