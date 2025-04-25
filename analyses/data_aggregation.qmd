@@ -9,7 +9,7 @@ format:
 params: 
   site: misiones
   taper: false
-  print: false
+  print: true
 
 execute:
   echo: false      
@@ -365,10 +365,13 @@ The following figures show the location of each plot as indicated by you in the 
 
 if (params$print) {
   # Maps per plot and per census
-  map <- ggplot(data_cor, aes(
-    x = longitude, y = latitude,
-    color = as.factor(Plot)
-  )) +
+  map <- data_cor |>
+    select(Plot, longitude, latitude) |>
+    unique() |>
+    ggplot(aes(
+      x = longitude, y = latitude,
+      color = as.factor(Plot)
+    )) +
     geom_point(alpha = 0.6, show.legend = FALSE) +
     # facet_wrap(~ Year) +
     labs(
@@ -380,7 +383,10 @@ if (params$print) {
     coord_equal() +
     theme_minimal()
 
-  plots <- ggplot(data_cor, aes(x = Year, y = Plot, color = as.factor(Plot))) +
+  plots <- data_cor |>
+    select(Plot, Year) |>
+    unique() |>
+    ggplot(aes(x = Year, y = Plot, color = as.factor(Plot))) +
     geom_point(alpha = 0.6, show.legend = FALSE) +
     scale_y_discrete(breaks = c(
       min(data_cor$Plot),
