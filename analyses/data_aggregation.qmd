@@ -7,7 +7,7 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: tapajoskm114
+  site: iracema
   taper: false
   print: true
 
@@ -188,6 +188,7 @@ data_cor <- data_cor |>
 plot_area <- data_cor |>
   select(Site, Plot, PlotArea) |>
   drop_na() |>
+  rename(PlotAreaUnique = PlotArea) |>
   unique()
 
 if (any(duplicated(with(plot_area, paste(Site, Plot))))) {
@@ -198,8 +199,9 @@ if (any(duplicated(with(plot_area, paste(Site, Plot))))) {
 }
 
 data_cor <- data_cor |>
-  select(-PlotArea) |>
-  left_join(plot_area, by = c("Site", "Plot"))
+  left_join(plot_area, by = c("Site", "Plot")) |>
+  mutate(PlotArea = ifelse(!is.na(PlotAreaUnique), PlotAreaUnique, PlotArea)) |>
+  select(-PlotAreaUnique)
 
 if (any(is.na(data_cor$PlotArea))) {
   stop(paste("Some plots are missing PlotArea values."))
@@ -218,21 +220,28 @@ if (any(data_cor$PlotArea > 100)) {
 ```
 
 ```{r complete-other-data}
+# remove missing plots (warning is given later)
+data_cor <- data_cor |>
+  filter(!is.na(Plot))
+
 data_cor <- data_cor |>
   # add UPA info in Mil
   mutate(Plot = ifelse(Site == "Mil", paste0("UPA_B_", Plot), Plot))
 
-# add census year when missing
-if (anyNA(data_cor$Year)) {
-  data_cor <- data_cor |>
-    select(Site, Plot, Year, IdCensus) |>
-    drop_na() |>
-    unique() |>
-    mutate(Year_Census = median(Year)) |>
-    right_join(data_cor) |>
-    mutate(Year = ifelse(is.na(Year), Year_Census, Year)) |>
-    mutate(Year_Census = NULL)
+# add census year information per plot
+if (!"IdCensus" %in% colnames(data_cor)) {
+  data_cor <- mutate(data_cor, IdCensus = as.character(Year))
 }
+
+data_cor <- data_cor |>
+  select(Site, Plot, Year, IdCensus) |>
+  drop_na() |>
+  group_by(Site, Plot, IdCensus) |>
+  summarise(year_census = median(Year)) |>
+  right_join(data_cor) |>
+  # add missing years
+  mutate(Year = ifelse(is.na(Year), year_census, Year)) |>
+  mutate(year_census = ifelse(is.na(year_census), Year, year_census))
 ```
 
 ```{r remove-values}
@@ -359,6 +368,17 @@ data_cor %>%
     "Number of individuals"
   ))
 ```
+
+```{r}
+text <- ""
+if (any(is.na(data_raw$Plot))) {
+  text <- data_raw |>
+    filter(is.na(Plot)) |>
+    summarise(n_distinct(IdTree)) |>
+    paste("trees don't have a plot ID.")
+}
+```
+`r text`
 
 *Please let us know if there are missing plots or censuses.*
 
@@ -1183,10 +1203,10 @@ tree_info <- data_cor |>
 missing_censuses <- data_cor |>
   # list all census years by plot and subplot
   group_by(Site, Plot, Subplot) |>
-  reframe(Year = unique(Year)) |>
+  reframe(year_census = unique(year_census)) |>
   ungroup() |>
   # add all combinations of IdStem x IdCensus (by Plot and Subplot)
-  merge(
+  right_join(
     unique(data_cor[, c("Site", "Plot", "Subplot", "IdStem")]),
     by = c("Site", "Plot", "Subplot")
   ) |>
@@ -1194,18 +1214,20 @@ missing_censuses <- data_cor |>
   merge(tree_info) |>
   # add DBH information
   merge(
-    data_cor[, c("IdStem", "Year", "diameter_cor")],
-    by = c("IdStem", "Year"),
+    data_cor[, c("IdStem", "year_census", "diameter_cor")],
+    by = c("IdStem", "year_census"),
     all = TRUE
   ) |>
   # interpolate missing diameters
   group_by(IdStem) |>
   mutate(
-    diameter_cor = interpolate(diameter_cor, Year)
+    diameter_cor = interpolate(diameter_cor, year_census)
   ) |>
   subset(!is.na(diameter_cor)) |>
   # keep only measurements missing from original data:
-  subset(!paste(IdStem, Year) %in% with(data_cor, paste(IdStem, Year)))
+  subset(!paste(IdStem, year_census) %in%
+    with(data_cor, paste(IdStem, year_census))) |>  #nolint
+  mutate(Year = year_census)
 
 # add interpolated DBHs to raw data
 data_cor <- bind_rows(
@@ -1479,20 +1501,24 @@ data_aggr <- c()
 # for each census year, add information on previous and next census years
 data_year <- data_cor |>
   ungroup() |>
-  select(Site, Plot, Year) |>
+  select(Site, Plot, year_census) |>
   unique() |>
-  arrange(Site, Plot, Year) |>
+  drop_na() |>
+  arrange(Site, Plot, year_census) |>
   group_by(Site, Plot) |>
   mutate(
-    prev_census = c(NA, Year[-length(Year)]),
-    next_census = c(Year[-1], NA)
+    prev_census = c(NA, year_census[-length(year_census)]),
+    next_census = c(year_census[-1], NA)
   ) |>
   ungroup()
 
 # add information on each tree's recruitment and mortality years
 data_cor <- data_cor |>
-  merge(data_year) |>
-  mutate(recr_year = min(Year), mort_year = max(Year), .by = IdStem)
+  left_join(data_year) |>
+  mutate(
+    recr_year = min(year_census),
+    mort_year = max(year_census), .by = IdStem
+  )
 ```
 
 ## Taxonomic Diversity
@@ -1531,7 +1557,7 @@ The following figures represent all the above mentioned indices at the species a
 # species
 neutral_div_sp <- data_cor %>%
   subset(!is.na(species_cleaned)) %>%
-  group_by(Site, Plot, Year, scientific_cleaned) %>%
+  group_by(Site, Plot, Year = year_census, scientific_cleaned) %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(Site, Plot, Year) %>%
   summarise(
@@ -1560,7 +1586,7 @@ neutral_div_sp <- data_cor %>%
 # genera
 neutral_div_gen <- data_cor %>%
   subset(!is.na(genus_cleaned)) %>%
-  group_by(Site, Plot, Year, genus = genus_cleaned) %>%
+  group_by(Site, Plot, Year = year_census, genus = genus_cleaned) %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(Site, Plot, Year) %>%
   summarise(
@@ -1700,7 +1726,7 @@ The following figures represent all the above mentioned indices. The y axis show
 #| message: false
 #| warning: false
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year, scientific_cleaned) |>
+  group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
     read.delim("data/derived_data/traits_v4.tsv"),
@@ -1713,7 +1739,7 @@ data_aggr <- data_cor |>
 
 ```{r functional-composition-n}
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year, scientific_cleaned) |>
+  group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
     read.delim("data/derived_data/traits_v4.tsv"),
@@ -1755,7 +1781,7 @@ The following figures represent all the above mentioned indices. The y axis show
 #| message: false
 #| warning: false
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year, scientific_cleaned) |>
+  group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
     read.delim("data/derived_data/traits_v4.tsv"),
@@ -1807,7 +1833,7 @@ matrix_trait <- read.delim("data/derived_data/traits_v4.tsv") |>
 matrix_abund <- data_cor %>%
   subset(!is.na(scientific_cleaned)) %>%
   group_by(
-    meas_id = paste(Site, Plot, Year, sep = "__"),
+    meas_id = paste(Site, Plot, year_census, sep = "__"),
     scientific_cleaned
   ) %>%
   summarise(count = n(), .groups = "drop") |>
@@ -1874,7 +1900,7 @@ These indices provide a comprehensive understanding of how functionally diverse 
 #| warning: false
 # add information on percentage of undetermined species
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(
     p_undet_spp = sum(is.na(species_cleaned)) / n(),
     p_undet_gen = sum(is.na(genus_cleaned)) / n(),
@@ -1887,7 +1913,7 @@ data_aggr <- data_cor |>
 #| message: false
 #| warning: false
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year, scientific_cleaned) |>
+  group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
     read.delim("data/derived_data/traits_v4.tsv"),
@@ -1924,7 +1950,7 @@ gini <- function(x, w = NULL, unbiased = TRUE) {
 }
 
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(variable = "gini", value = gini(diameter_cor)) |>
   rbind(data_aggr)
 ```
@@ -1933,7 +1959,7 @@ data_aggr <- data_cor |>
 #| message: false
 #| warning: false
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(variable = "dbh_median", value = median(diameter_cor)) |>
   rbind(data_aggr)
 ```
@@ -1942,7 +1968,7 @@ data_aggr <- data_cor |>
 #| message: false
 #| warning: false
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(variable = "dbh_mean", value = mean(diameter_cor)) |>
   rbind(data_aggr)
 ```
@@ -1951,7 +1977,7 @@ data_aggr <- data_cor |>
 #| message: false
 #| warning: false
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(variable = "dbh_min", value = min(diameter_cor)) |>
   rbind(data_aggr)
 ```
@@ -1960,7 +1986,7 @@ data_aggr <- data_cor |>
 #| message: false
 #| warning: false
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(variable = "dbh_max", value = max(diameter_cor)) |>
   rbind(data_aggr)
 ```
@@ -2000,7 +2026,7 @@ The following figures represent the stem abundances and demographic rates. The y
 #| warning: false
 data_aggr <-
   data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(
     nstem = n() / unique(PlotArea)
   ) |>
@@ -2013,7 +2039,7 @@ data_aggr <-
 #| warning: false
 data_aggr <- data_cor |>
   mutate(recr = ifelse(Year == recr_year, 1 / (Year - prev_census), 0)) |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(nstem_recr = sum(recr / PlotArea)) |>
   pivot_longer(nstem_recr, names_to = "variable") |>
   rbind(data_aggr)
@@ -2024,7 +2050,7 @@ data_aggr <- data_cor |>
 #| warning: false
 data_aggr <- data_cor |>
   subset(Year == mort_year) |>
-  group_by(Site, Plot, Year, next_census) |>
+  group_by(Site, Plot, Year = year_census, next_census) |>
   summarise(nstem_mort = sum(1 / (next_census - Year) / unique(PlotArea))) |>
   mutate(Year = next_census) |>
   subset(!is.na(Year)) |>
@@ -2075,7 +2101,7 @@ data_cor <- data_cor |>
 #| warning: false
 data_aggr <-
   data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(
     ba = sum(ba / PlotArea)
   ) |>
@@ -2088,7 +2114,10 @@ data_aggr <-
 #| warning: false
 data_aggr <- data_cor |>
   # ba recruitment per tree
-  mutate(recr = ifelse(Year == recr_year, ba / (Year - prev_census), 0)) |>
+  mutate(recr = ifelse(Year == recr_year,
+    ba / (year_census - prev_census),
+    0
+  )) |>
   group_by(Site, Plot, Year) |>
   summarise(ba_recr = sum(recr / PlotArea)) |>
   pivot_longer(ba_recr, names_to = "variable") |>
@@ -2101,7 +2130,7 @@ data_aggr <- data_cor |>
 data_aggr <- data_cor |>
   subset(!is.na(ba_growth)) |>
   mutate(ba_gr_yr = ba_growth) |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(ba_growth = sum(ba_gr_yr / PlotArea)) |>
   pivot_longer(ba_growth, names_to = "variable") |>
   rbind(data_aggr)
@@ -2111,8 +2140,8 @@ data_aggr <- data_cor |>
 #| message: false
 #| warning: false
 data_aggr <- data_cor |>
-  subset(Year == mort_year) |>
-  group_by(Site, Plot, Year, next_census) |>
+  subset(year_census == mort_year) |>
+  group_by(Site, Plot, Year = year_census, next_census) |>
   summarise(ba_mort = sum(ba / (next_census - Year) / PlotArea)) |>
   mutate(Year = next_census) |>
   subset(!is.na(Year)) |>
@@ -2196,7 +2225,7 @@ if (any(is.na(data_cor$agb))) {
 #| warning: false
 data_aggr <-
   data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(
     agb = sum(agb / PlotArea)
   ) |>
@@ -2209,8 +2238,10 @@ data_aggr <-
 #| warning: false
 data_aggr <- data_cor |>
   # agb recruitment per tree
-  mutate(recr = ifelse(Year == recr_year, agb / (Year - prev_census), 0)) |>
-  group_by(Site, Plot, Year) |>
+  mutate(recr = ifelse(year_census == recr_year,
+    agb / (year_census - prev_census), 0
+  )) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(agb_recr = sum(recr / PlotArea)) |>
   pivot_longer(agb_recr, names_to = "variable") |>
   rbind(data_aggr)
@@ -2222,7 +2253,7 @@ data_aggr <- data_cor |>
 data_aggr <- data_cor |>
   subset(!is.na(agb_growth)) |>
   mutate(agb_gr_yr = agb_growth) |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(agb_growth = sum(agb_gr_yr / PlotArea)) |>
   pivot_longer(agb_growth, names_to = "variable") |>
   rbind(data_aggr)
@@ -2233,7 +2264,7 @@ data_aggr <- data_cor |>
 #| warning: false
 data_aggr <- data_cor |>
   subset(Year == mort_year) |>
-  group_by(Site, Plot, Year, next_census) |>
+  group_by(Site, Plot, Year = year_census, next_census) |>
   summarise(agb_mort = sum(agb / (next_census - Year) / PlotArea)) |>
   mutate(Year = next_census) |>
   subset(!is.na(Year)) |>
