@@ -7,7 +7,7 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: iracema
+  site: sungailalang
   taper: false
   print: true
 
@@ -220,10 +220,6 @@ if (any(data_cor$PlotArea > 100)) {
 ```
 
 ```{r complete-other-data}
-# remove missing plots (warning is given later)
-data_cor <- data_cor |>
-  filter(!is.na(Plot))
-
 data_cor <- data_cor |>
   # add UPA info in Mil
   mutate(Plot = ifelse(Site == "Mil", paste0("UPA_B_", Plot), Plot))
@@ -247,6 +243,11 @@ data_cor <- data_cor |>
 ```{r remove-values}
 #| message: false
 #| warning: false
+
+# remove missing plots (warning is given later)
+data_cor <- data_cor |>
+  filter(!is.na(Plot))
+
 # some values (partial censuses, etc) need to be removed in some sites
 text <- ""
 if (any(data_cor$Site == "Paracou")) {
@@ -318,7 +319,7 @@ if (all(is.na(data_cor$e))) {
 }
 
 # if some plots have coordinates but not all: use mean value of E for plots with
-# missing coordiantes
+# missing coordinates
 data_cor <- data_cor |>
   mutate(e = ifelse(is.na(e), mean(data_cor$e, na.rm = TRUE), e))
 
@@ -1226,7 +1227,7 @@ missing_censuses <- data_cor |>
   subset(!is.na(diameter_cor)) |>
   # keep only measurements missing from original data:
   subset(!paste(IdStem, year_census) %in%
-    with(data_cor, paste(IdStem, year_census))) |>  #nolint
+    with(data_cor, paste(IdStem, year_census))) |> # nolint
   mutate(Year = year_census)
 
 # add interpolated DBHs to raw data
@@ -1353,15 +1354,22 @@ Outliers are defined here as the 0.5% lowest DBH growth values (all groups combi
 #| message: false
 #| warning: false
 data_cor <- data_cor |>
-  merge(species_groups, by = "scientific_cleaned") |>
+  left_join(species_groups, by = "scientific_cleaned") |>
   group_by(sp_group) |>
   mutate(diam_group = paste(sp_group, ntile(diameter_cor, 5), sep = "_")) |>
   # lower diameter growth threshold is the same for all species and sizes
   ungroup() |>
-  mutate(dgrowth_lower = quantile(diam_growth, 0.005, na.rm = TRUE)) |>
+  mutate(
+    dgrowth_lower = quantile(diam_growth, 0.005, na.rm = TRUE),
+    # define general upper quantile for unidentified individuals
+    dgrowth_upper = quantile(diam_growth, 0.995, na.rm = TRUE)
+  ) |>
   # upper diameter growth threshold defined by species and size
   group_by(diam_group) |>
-  mutate(dgrowth_upper = quantile(diam_growth, 0.995, na.rm = TRUE)) |>
+  mutate(dgrowth_upper = ifelse(!is.na(sp_group),
+    quantile(diam_growth, 0.995, na.rm = TRUE),
+    dgrowth_upper
+  )) |>
   # define outlier values
   mutate(outlier = !is.na(diam_growth) &
     (diam_growth < dgrowth_lower | diam_growth > dgrowth_upper)) |> # nolint
