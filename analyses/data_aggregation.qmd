@@ -7,7 +7,7 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: sungailalang
+  site: jari
   taper: false
   print: true
 
@@ -220,10 +220,6 @@ if (any(data_cor$PlotArea > 100)) {
 ```
 
 ```{r complete-other-data}
-data_cor <- data_cor |>
-  # add UPA info in Mil
-  mutate(Plot = ifelse(Site == "Mil", paste0("UPA_B_", Plot), Plot))
-
 # add census year information per plot
 if (!"IdCensus" %in% colnames(data_cor)) {
   data_cor <- mutate(data_cor, IdCensus = as.character(Year))
@@ -247,6 +243,9 @@ data_cor <- data_cor |>
 # remove missing plots (warning is given later)
 data_cor <- data_cor |>
   filter(!is.na(Plot))
+data_cor <- data_cor |>
+  # add UPA info in Mil
+  mutate(Plot = ifelse(Site == "Mil", paste0("UPA_B_", Plot), Plot))
 
 # some values (partial censuses, etc) need to be removed in some sites
 text <- ""
@@ -446,11 +445,11 @@ Most sites have separate columns with the species vernacular names, and scientif
 
 if (params$site %in% c("paracou", "montagne-tortue", "bafog", "manare")) {
   vern <- data_cor |>
-    select(vernacular_raw, scientific_cleaned) |>
+    select(VernName, scientific_cleaned) |>
     drop_na() |>
-    subset(vernacular_raw != "-" &
-      !str_detect(substr(vernacular_raw, 1, 1), "[[:upper:]]")) |> # nolint
-    group_by(vernacular_raw) |>
+    subset(VernName != "-" &
+      !str_detect(substr(VernName, 1, 1), "[[:upper:]]")) |> # nolint
+    group_by(VernName) |>
     summarise(scientific_vern = names(
       sort(table(scientific_cleaned), decreasing = TRUE)
     )[1]) |>
@@ -2308,7 +2307,7 @@ All the aggregated data generated is stored in a csv file, which will further be
 data_aggr |>
   write.csv(paste0(
     "data/derived_data/aggregated_data_",
-    paste(gsub(" ", "-", tolower(unique(data_aggr$Site))), collapse = "_"),
+    params$site,
     ".csv"
   ), row.names = FALSE)
 ```
@@ -2321,7 +2320,7 @@ data_cor |>
   unique() |>
   write.csv(paste0(
     "data/derived_data/plot_area_",
-    paste(gsub(" ", "-", tolower(unique(data_aggr$Site))), collapse = "_"),
+    params$site,
     ".csv"
   ), row.names = FALSE)
 ```
