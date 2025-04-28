@@ -7,7 +7,7 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: misiones
+  site: tapajoskm114
   taper: false
   print: true
 
@@ -205,8 +205,15 @@ if (any(is.na(data_cor$PlotArea))) {
   stop(paste("Some plots are missing PlotArea values."))
 }
 
+# avoid absurd PlotArea values
+data_cor <- data_cor |>
+  mutate(PlotArea = ifelse(grepl("Tapajos", Site), 0.25, PlotArea))
+
 if (any(data_cor$PlotArea <= 0)) {
   stop(paste("Some PlotArea values are zero or negative."))
+}
+if (any(data_cor$PlotArea > 100)) {
+  stop(paste("Some PlotArea values are > 100 ha."))
 }
 ```
 
