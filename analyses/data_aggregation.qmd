@@ -7,7 +7,7 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: jari
+  site: gola
   taper: false
   print: true
 
@@ -767,20 +767,11 @@ We want to make sure that there are no duplicated measurements in the data. So w
 
 If we find duplicates, only the first observation is retained in the data.
 
-```{r complete-idstem}
-#| message: false
-#| warning: false
-data_cor <- data_cor |>
-  mutate(IdTree = paste(Site, Plot, Subplot, IdTree, sep = "_")) |>
-  mutate(IdStem = paste(IdTree, IdStem, sep = "_"))
-```
-
 ```{r get-stem-id-iwokrama}
 if (any(data_cor$Site == "Iwokrama")) {
   data_cor <- data_cor |>
-    rename(IdMeas = IdTree) |>
-    separate_wider_delim(IdMeas, "_", names = "IdTree", too_many = "drop") |>
-    mutate(IdStem = paste(Site, Plot, Subplot, IdTree, sep = "_"))
+    mutate(IdTree = NULL) |>
+    separate_wider_delim(IdStem, "_", names = c("IdTree", NA, NA, "IdStem", NA))
   text <- paste(
     "In Iwokrama, we have removed census year information from the",
     "stem ID so that measurements of the same stem can be matched",
@@ -792,6 +783,14 @@ if (any(data_cor$Site == "Iwokrama")) {
 ```
 
 `r text`
+
+```{r complete-idstem}
+#| message: false
+#| warning: false
+data_cor <- data_cor |>
+  mutate(IdTree = paste(Site, Plot, Subplot, IdTree, sep = "_")) |>
+  mutate(IdStem = paste(IdTree, IdStem, sep = "_"))
+```
 
 ```{r print-duplicated-stems}
 #| message: false
@@ -1061,7 +1060,7 @@ duplicated_species <- data_cor %>%
     nbsp_na = n_distinct(scientific_cleaned, na.rm = FALSE)
   )
 
-data_cor <- data_cor %>%
+data_cor2 <- data_cor %>%
   group_by(IdTree) %>%
   arrange(Year) %>%
   mutate(scientific_cleaned = last(scientific_cleaned, na_rm = TRUE)) %>%
@@ -1712,19 +1711,19 @@ We quantified the functional composition as the community-weighted mean (CWM) fo
 
 The traits computed in the analysis were:
 
-### Leaf area
+#### Leaf area
 Associated with light capture and leaf construction cost
 
-### Leaf nitrogen content per leaf dry mass
+- Leaf nitrogen content per leaf dry mass
 Reflects photosynthetic capacity and nutrient-use strategy.
 
-### Specific leaf area (SLA)
+#### Specific leaf area (SLA)
 Indicates growth rate and resource acquisition.
 
-### Stem specific wood density
+#### Stem specific wood density
 Related to mechanical strength, water transport efficiency, and survival strategies.
 
-### Asymptotic height
+#### Asymptotic height
 A proxy for maximum potential plant height.
 
 The following figures represent all the above mentioned indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
@@ -1866,16 +1865,16 @@ data_aggr <-
 
 To describe the variation and structure of traits within communities, we used the above functional traits `r traits_used` to calculate multiple complementary functional diversity indices. These indices capture different dimensions of diversity within trait space, based on species’ positions and abundances:
 
-### Functional Richness (scaled)
+#### Functional Richness (scaled)
 Measures the volume of trait space occupied by the community, standardized for comparability. It reflects the range of functional strategies present, regardless of species abundance.
 
-### Functional Divergence
+#### Functional Divergence
 Indicates how abundance is distributed toward the edges of trait space. Higher values suggest that dominant species are functionally distinct from the community centroid, promoting niche differentiation.
 
-### Functional Evenness
+#### Functional Evenness
 Quantifies the regularity of species spacing and abundance distribution within trait space. High evenness implies that trait values are uniformly distributed and that resource use is balanced.
 
-### Functional Dispersion
+#### Functional Dispersion
 Represents the mean distance of individual species to the community’s trait centroid, weighted by abundance. It accounts for both the spread and distribution of traits and is sensitive to both richness and dominance.
 
 The following figures represent all the above mentioned indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
