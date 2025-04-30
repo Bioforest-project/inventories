@@ -136,11 +136,9 @@ read_harmonized <- function(file) {
     col_types = cols()
   ) %>%
     add_column(!!!cols[!names(cols) %in% names(.)]) %>%
-    mutate(raw_taxonomy = paste(
-      ScientificName, "-", VernName, "-",
-      Family, Genus, Species
-    )) %>%
-    mutate(file = gsub("../inventories/data/raw_data/", "", file))
+    mutate(raw_taxonomy = paste(ScientificName, "-", VernName, "-",
+                                Family, Genus, Species)) %>%
+    mutate(file = gsub("data/raw_data/", "", file))
 }
 
 # extracting data file and creating consistent site names
@@ -166,7 +164,7 @@ data_cor <- data_raw
 #| message: false
 #| warning: false
 data_species <-
-  read_tsv("data/derived_data/taxonomy_v4.tsv") |>
+  read_tsv("data/derived_data/taxonomy_v5.tsv") |>
   select(contains("cleaned") | "raw_taxonomy") |>
   unique()
 
@@ -1730,7 +1728,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v4.tsv"),
+    read.delim("data/derived_data/traits_v5.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_ba")) |>
@@ -1743,7 +1741,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v4.tsv"),
+    read.delim("data/derived_data/traits_v5.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_n")) |>
@@ -1785,7 +1783,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v4.tsv"),
+    read.delim("data/derived_data/traits_v5.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwv_n")) |>
@@ -1819,7 +1817,7 @@ if (isTRUE(params$print)) {
 #| message: false
 #| warning: false
 traits_used <- c("WD", "SLA", "LA", "N")
-matrix_trait <- read.delim("data/derived_data/traits_v4.tsv") |>
+matrix_trait <- read.delim("data/derived_data/traits_v5.tsv") |>
   subset(scientific_cleaned %in% data_cor$scientific_cleaned) |>
   subset(trait %in% traits_used) |>
   mutate(log_trait_value_imputed = log(trait_value_imputed)) |>
@@ -1917,7 +1915,7 @@ data_aggr <- data_cor |>
   group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v4.tsv"),
+    read.delim("data/derived_data/traits_v5.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0("p_imputed_", trait)) |>
@@ -2178,7 +2176,7 @@ We used equation 7 from Chave et al. (2014) to estimate tree-level aboveground b
 #| message: false
 #| warning: false
 # add wood density
-data_cor <- read.delim("data/derived_data/traits_v4.tsv") |>
+data_cor <- read.delim("data/derived_data/traits_v5.tsv") |>
   subset(trait == "WD") |>
   pivot_wider(
     id_cols = "scientific_cleaned",
