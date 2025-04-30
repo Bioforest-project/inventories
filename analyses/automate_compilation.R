@@ -5,6 +5,9 @@ raw_data_sites <- gsub(
   "^[^_]*_[^_]*_([^_]*)_.*$", "\\1",
   list.files("data/raw_data", "harmonized")
 ) |>
+  strsplit("-") |>
+  lapply(first) |>
+  unlist() |>
   unique()
 
 agg_data_sites <- gsub(
@@ -27,11 +30,17 @@ in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv",
   unique()
 
 
-compile_sites <- intersect(raw_data_sites, c("tene2018", in_plot_info))
+compile_sites <- intersect(
+  raw_data_sites,
+  c("tene2018", in_plot_info, gsub("-", "", in_plot_info))
+)
+
+# add sites which had "-" in the file name
+add <- c("antimary-apu2", "antimary-apu3", "embrapa-acre")
 
 # removing sites that are not working
 remove <- c(
-  "mil", "pad-limo-2-barracos", "pad-limo-chico-bocao", "pad-limo-cumaru",
+  "pad-limo-2-barracos", "pad-limo-chico-bocao", "pad-limo-cumaru",
   "pad-limo-jatoba", "pad-limo-pocao", "pad-limo-stcp", "pad-limo-tabocal"
 )
 compile_sites <- compile_sites[!compile_sites %in% remove]
@@ -55,7 +64,7 @@ if (length(compile_sites) > 0) {
         input = "analyses/data_aggregation.qmd",
         output_format = "all",
         output_file = paste0("data_aggregation_", s, ".pdf"),
-        execute_params = list(site = s, taper = FALSE)
+        execute_params = list(site = s, taper = FALSE, print = TRUE)
       )
       # move to "outputs/data_aggregation_reports" folder
       file.rename(
@@ -74,9 +83,24 @@ print(paste(
   paste(failed_sites, collapse = ", ")
 ))
 
+version <- 7
+# delete previous files
+paste0("data/derived_data/aggregated_data_v", seq_len(version), ".csv") |>
+  file.remove()
 # make one file with all sites
 list.files("data/derived_data", "aggregated_data_", full.names = TRUE) |>
   lapply(read.csv) |>
   data.table::rbindlist() |>
-  write.csv(file = "data/derived_data/aggregated_data.csv", row.names = FALSE)
-list.files("data/derived_data", "aggregated_data_", full.names = TRUE)
+  write.csv(
+    file = paste0("data/derived_data/aggregated_data_v", version, ".csv"),
+    row.names = FALSE
+  )
+
+# copy to modelling folder
+modelling_folder <- "D:/github/Bioforest-project/modelling/data/raw_data/"
+if (dir.exists(modelling_folder)) {
+  file.copy(paste0("data/derived_data/aggregated_data_v", version, ".csv"),
+    modelling_folder,
+    overwrite = TRUE
+  )
+}
