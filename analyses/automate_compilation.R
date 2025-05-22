@@ -4,10 +4,14 @@ library(tidyverse)
 raw_data_sites <- gsub(
   "^[^_]*_[^_]*_([^_]*)_.*$", "\\1",
   list.files("data/raw_data", "harmonized")
-) |>
-  strsplit("-") |>
+)
+
+raw_data_sites <- raw_data_sites |>
+  strsplit("-logged|-control|-postlogging|-t1|-t2|-t3|-temoin") |>
   lapply(first) |>
   unlist() |>
+  c(raw_data_sites) |>
+  # c(gsub("limoeiro", "limo", raw_data_sites)) |>
   unique()
 
 agg_data_sites <- gsub(
@@ -29,26 +33,22 @@ in_plot_info <- read.csv("data/raw_data/bioforest-plot-information.csv",
   iconv(to = "ASCII//TRANSLIT") |>
   unique()
 
-
 compile_sites <- intersect(
   raw_data_sites,
   c("tene2018", in_plot_info, gsub("-", "", in_plot_info))
 )
 
-# add sites which had "-" in the file name
-add <- c("antimary-apu2", "antimary-apu3", "embrapa-acre")
-
 # removing sites that are not working
 remove <- c(
-  "pad-limo-2-barracos", "pad-limo-chico-bocao", "pad-limo-cumaru",
-  "pad-limo-jatoba", "pad-limo-pocao", "pad-limo-stcp", "pad-limo-tabocal"
+  "gola" # gola: plots are very small, with a nested design of min DBH
+  # group plots by clusters? + group trees by DBH
+  # note: we only compile one pad-limo as all files are the same and contain the
+  # entire set of pad-limo sites
 )
 compile_sites <- compile_sites[!compile_sites %in% remove]
 
 # cache: if we don't want to redo the compilation for files that already exist
-
 cache <- TRUE
-
 if (cache) {
   done <- list.files("data/derived_data/", pattern = "aggregated_data_") |>
     gsub(pattern = "aggregated_data_|.csv", replacement = "")
@@ -83,13 +83,13 @@ print(paste(
   paste(failed_sites, collapse = ", ")
 ))
 
-version <- 7
+version <- 8
 # delete previous files
 paste0("data/derived_data/aggregated_data_v", seq_len(version), ".csv") |>
   file.remove()
 # make one file with all sites
 list.files("data/derived_data", "aggregated_data_", full.names = TRUE) |>
-  lapply(read.csv) |>
+  lapply(function(x) read_csv(x, col_types = "ccicd")) |>
   data.table::rbindlist() |>
   write.csv(
     file = paste0("data/derived_data/aggregated_data_v", version, ".csv"),

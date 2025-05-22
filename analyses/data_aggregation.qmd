@@ -7,7 +7,7 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: paracou
+  site: antimary-apu3
   taper: false
   print: true
 
@@ -136,8 +136,10 @@ read_harmonized <- function(file) {
     col_types = cols()
   ) %>%
     add_column(!!!cols[!names(cols) %in% names(.)]) %>%
-    mutate(raw_taxonomy = paste(ScientificName, "-", VernName, "-",
-                                Family, Genus, Species)) %>%
+    mutate(raw_taxonomy = paste(
+      ScientificName, "-", VernName, "-",
+      Family, Genus, Species
+    )) %>%
     mutate(file = gsub("data/raw_data/", "", file))
 }
 
@@ -1007,6 +1009,24 @@ The first step is to remove all the dead individuals if there is a column called
 
 `r text`
 
+```{r}
+#| message: false
+#| warning: false
+
+text <- ""
+if (any(data_cor$Site == "STREK")) {
+  # in strek, dead trees are marked with the code 999 in their DBH
+  data_cor <- data_cor |>
+    filter(!grepl("999", Diameter) & !grepl("999", Circ))
+  text <- paste(
+    "In STREK, we removed all trees with diameter or circumference",
+    "values containing 999 as they are considered dead."
+  )
+}
+```
+
+`r text`
+
 ### Remove life forms other than trees
 
 The second step is to remove any other life forms apart from trees, such as Lianas, palms, cacti etc. We use the column "LifeForm" when present, and remove the rows with names: "palm","palms", "tree fan", "death", "vine", "vines", "lianas". If your dataset has other life forms to remove, please let us know.
@@ -1053,7 +1073,7 @@ duplicated_species <- data_cor %>%
     nbsp_na = n_distinct(scientific_cleaned, na.rm = FALSE)
   )
 
-data_cor2 <- data_cor %>%
+data_cor <- data_cor %>%
   group_by(IdTree) %>%
   arrange(Year) %>%
   mutate(scientific_cleaned = last(scientific_cleaned, na_rm = TRUE)) %>%
@@ -1092,6 +1112,58 @@ The following flowchart summarises the corrections applied to DBH and DBH change
 #| message: false
 #| warning: false
 data_cor$diameter_cor <- data_cor$Diameter
+```
+
+## Detect misplaced decimals 
+
+Some trees have abnormally larger diameters because the decimal was misplaced. We check all diameter measurements $\geq$ 100 cm: if the value divided by 10 is within 10% of the range of other diameter values of the same stem, we keep the new measurement (divided by 10). 
+
+```{r correct-decimals}
+detect_decimal <- function(x, lim = 100) {
+  if (length(x) > 1 & sum(x > lim) == 1) { # nolint
+    if (any((x[x > lim] / 10 > 0.9 * min(x[x <= lim])) &
+      (x[x > lim] / 10 < 1.1 * max(x[x <= lim])))) { # nolint
+      return(x > lim)
+    } else {
+      return(rep(FALSE, length(x)))
+    }
+  } else {
+    return(rep(FALSE, length(x)))
+  }
+}
+data_cor <- data_cor |>
+  group_by(IdStem) |>
+  mutate(
+    diameter_cor =
+      diameter_cor / ifelse(detect_decimal(diameter_cor), 10, 1)
+  ) |>
+  ungroup()
+
+if (sum(data_cor$Diameter != data_cor$diameter_cor) > 0) {
+  text <- paste(
+    "We have changed",
+    sum(data_cor$Diameter != data_cor$diameter_cor),
+    "measurements."
+  )
+} else {
+  text <- ""
+}
+```
+
+```{r}
+if (with(data_cor, sum(Diameter != diameter_cor) > 0)) {
+  id_cor <- subset(data_cor, Diameter != diameter_cor)$IdStem |> unique()
+  if (length(id_cor) > 12) id_cor <- sample(id_cor, 12)
+  data_cor |>
+    filter(IdStem %in% id_cor) |>
+    ggplot(aes(Year)) +
+    labs(y = "Diameter (cm)", col = "Was the DBH\ndivided by 10?") +
+    geom_point(aes(y = diameter_cor), col = "forestgreen") +
+    geom_point(aes(y = Diameter, col = diameter_cor != Diameter)) +
+    scale_color_manual(values = c("black", "red")) +
+    facet_wrap(~IdStem, scales = "free") +
+    theme_minimal()
+}
 ```
 
 ## Taper correction
@@ -1621,7 +1693,7 @@ data_aggr <- data_aggr %>%
 aggr_fig <- function(data, vars_names, title_fig = NULL) {
   g <- data %>%
     subset(variable %in% names(var_names)) %>%
-    ggplot(aes(x = Year, y = value, color = as.factor(Plot))) +
+    ggplot(aes(x = Year, y = value, color = paste(Site, Plot))) +
     geom_line(show.legend = FALSE) +
     geom_point(show.legend = (length(unique(data$Plot)) <= 28)) +
     facet_wrap(~variable,
@@ -1716,23 +1788,22 @@ Indicates growth rate and resource acquisition.
 #### Stem specific wood density
 Related to mechanical strength, water transport efficiency, and survival strategies.
 
-#### Asymptotic height
-A proxy for maximum potential plant height.
 
 The following figures represent all the above mentioned indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
 
 ```{r functional-composition-ba}
 #| message: false
 #| warning: false
+
 data_aggr <- data_cor |>
   group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
-  merge(
-    read.delim("data/derived_data/traits_v5.tsv"),
+  inner_join(read.delim("data/derived_data/traits_v5.tsv"),
     by = "scientific_cleaned"
   ) |>
+  filter(!is.na(genus_trait_value_imputed)) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_ba")) |>
-  reframe(value = exp(weighted.mean(log(trait_value_imputed), ba))) |>
+  reframe(value = exp(weighted.mean(log(genus_trait_value_imputed), ba))) |>
   rbind(data_aggr)
 ```
 
@@ -1740,12 +1811,12 @@ data_aggr <- data_cor |>
 data_aggr <- data_cor |>
   group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
-  merge(
-    read.delim("data/derived_data/traits_v5.tsv"),
+  inner_join(read.delim("data/derived_data/traits_v5.tsv"),
     by = "scientific_cleaned"
   ) |>
+  filter(!is.na(genus_trait_value_imputed)) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_n")) |>
-  reframe(value = exp(mean(log(trait_value_imputed), na.rm = TRUE))) |>
+  reframe(value = exp(mean(log(genus_trait_value_imputed)))) |>
   rbind(data_aggr)
 ```
 
@@ -1768,6 +1839,135 @@ if (isTRUE(params$print)) {
   )
 }
 ```
+### Functional composition of fluxes
+
+We estimated the functional composition of fluxes as the functional trait value of each stem weighted by its contribution to a given flux (recruitment, growth or mortality). We quantified the fluxes in basal area, but it could be done in other ways (e.g. in AGB, stem abundance, etc). 
+
+```{r functional-composition-ba-recr}
+#| message: false
+#| warning: false
+
+ba_func <- function(x) pi * (x / 200)**2
+data_aggr <- data_cor |>
+  filter(!is.na(prev_year) & Year == recr_year) |>
+  inner_join(
+    read.delim("data/derived_data/traits_v5.tsv"),
+    by = "scientific_cleaned"
+  ) |>
+  filter(!is.na(genus_trait_value_imputed)) |>
+  group_by(Site, Plot,
+    Year = year_census,
+    variable = paste0(trait, "_cwm_rba")
+  ) |>
+  reframe(value = exp(weighted.mean(
+    log(genus_trait_value_imputed),
+    ba_func(diameter_cor) / (Year - prev_year)
+  ))) |>
+  rbind(data_aggr)
+```
+
+```{r fig-cwm-ba-recr}
+#| message: false
+#| warning: false
+#| fig.height: 6
+#| fig.width: 8
+
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "LA_cwm_rba" = "Leaf area (mm2)",
+    "N_cwm_rba" = "Leaf nitrogen content \n per leaf dry mass \n (mg g-1)",
+    "SLA_cwm_rba" = "Specific leaf area \n (mm2 mg-1)",
+    "WD_cwm_rba" = "Stem specific wood \n density (g cm-3)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Functional composition\nweighted by recruitment in BA"
+  )
+}
+```
+
+```{r functional-composition-ba-growth}
+#| message: false
+#| warning: false
+
+data_aggr <- data_cor |>
+  mutate(ba_growth = ba_func(diameter_cor - diam_growth + diam_growth_cor) -
+    ba_func(diameter_cor - diam_growth)) |> # nolint
+  filter(!is.na(ba_growth)) |>
+  inner_join(
+    read.delim("data/derived_data/traits_v5.tsv"),
+    by = "scientific_cleaned"
+  ) |>
+  filter(!is.na(genus_trait_value_imputed)) |>
+  group_by(Site, Plot,
+    Year = year_census,
+    variable = paste0(trait, "_cwm_gba")
+  ) |>
+  reframe(value = exp(weighted.mean(
+    log(genus_trait_value_imputed),
+    ba_growth
+  ))) |>
+  rbind(data_aggr)
+```
+
+```{r fig-cwm-ba-growth}
+#| message: false
+#| warning: false
+#| fig.height: 6
+#| fig.width: 8
+
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "LA_cwm_gba" = "Leaf area (mm2)",
+    "N_cwm_gba" = "Leaf nitrogen content \n per leaf dry mass \n (mg g-1)",
+    "SLA_cwm_gba" = "Specific leaf area \n (mm2 mg-1)",
+    "WD_cwm_gba" = "Stem specific wood \n density (g cm-3)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Functional composition\nweighted by growth in BA"
+  )
+}
+```
+
+```{r functional-composition-ba-mort}
+#| message: false
+#| warning: false
+
+data_aggr <- data_cor |>
+  filter(Year == mort_year) |>
+  mutate(ba_mort = ba_func(diameter_cor) / (next_census - Year)) |>
+  mutate(Year = next_census) |>
+  inner_join(
+    read.delim("data/derived_data/traits_v5.tsv"),
+    by = "scientific_cleaned"
+  ) |>
+  filter(!is.na(genus_trait_value_imputed)) |>
+  group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_mba")) |>
+  reframe(value = exp(weighted.mean(
+    log(genus_trait_value_imputed),
+    ba_mort
+  ))) |>
+  rbind(data_aggr)
+```
+
+
+```{r fig-cwm-ba-mort}
+#| message: false
+#| warning: false
+#| fig.height: 6
+#| fig.width: 8
+
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "LA_cwm_mba" = "Leaf area (mm2)",
+    "N_cwm_mba" = "Leaf nitrogen content \n per leaf dry mass \n (mg g-1)",
+    "SLA_cwm_mba" = "Specific leaf area \n (mm2 mg-1)",
+    "WD_cwm_mba" = "Stem specific wood \n density (g cm-3)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Functional composition\nweighted by mortality in BA"
+  )
+}
+```
 
 ### Functional variance
 
@@ -1781,13 +1981,13 @@ The following figures represent all the above mentioned indices. The y axis show
 #| warning: false
 data_aggr <- data_cor |>
   group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
-  reframe(ba = (diameter_cor / 200)^2 * pi) |>
-  merge(
+  inner_join(
     read.delim("data/derived_data/traits_v5.tsv"),
     by = "scientific_cleaned"
   ) |>
+  filter(!is.na(genus_trait_value_imputed)) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwv_n")) |>
-  reframe(value = var(log(trait_value_imputed))) |>
+  reframe(value = var(log(genus_trait_value_imputed))) |>
   rbind(data_aggr)
 ```
 
@@ -1820,7 +2020,7 @@ traits_used <- c("WD", "SLA", "LA", "N")
 matrix_trait <- read.delim("data/derived_data/traits_v5.tsv") |>
   subset(scientific_cleaned %in% data_cor$scientific_cleaned) |>
   subset(trait %in% traits_used) |>
-  mutate(log_trait_value_imputed = log(trait_value_imputed)) |>
+  mutate(log_trait_value_imputed = log(genus_trait_value_imputed)) |>
   pivot_wider(
     id_cols = "scientific_cleaned",
     names_from = trait,
@@ -1920,7 +2120,8 @@ data_aggr <- data_cor |>
   ) |>
   group_by(Site, Plot, Year, variable = paste0("p_imputed_", trait)) |>
   reframe(
-    value = 1 - sum(!is.na(trait_value_raw)) / sum(!is.na(trait_value_imputed))
+    value = 1 - sum(!is.na(species_trait_value_raw)) /
+      sum(!is.na(genus_trait_value_imputed))
   ) |>
   rbind(data_aggr)
 ```
@@ -2178,12 +2379,12 @@ We used equation 7 from Chave et al. (2014) to estimate tree-level aboveground b
 # add wood density
 data_cor <- read.delim("data/derived_data/traits_v5.tsv") |>
   subset(trait == "WD") |>
-  pivot_wider(
-    id_cols = "scientific_cleaned",
-    names_from = trait,
-    values_from = trait_value_imputed
-  ) |>
-  merge(data_cor, all.y = TRUE)
+  mutate(WD = ifelse(is.na(species_trait_value_raw),
+    genus_trait_value_imputed,
+    species_trait_value_raw
+  )) |>
+  select(scientific_cleaned, WD) |>
+  right_join(data_cor)
 
 p_na_wd <- round(sum(is.na(data_cor$WD)) / nrow(data_cor) * 100, 1)
 data_cor <- data_cor |>
