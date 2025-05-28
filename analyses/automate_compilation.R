@@ -3,7 +3,8 @@ library(tidyverse)
 # if updated script - remove old version of aggregated data
 new <- FALSE
 if (new) { # remove files that were not create today
-  files <- list.files("data/derived_data/", "aggregated_data", full.names = T)
+  files <- "data/derived_data/" |>
+    list.files("aggregated_data", full.names = TRUE)
   files[as.Date(file.info(files)$ctime) < Sys.Date()] |> file.remove()
 }
 # automate qmd compilation
