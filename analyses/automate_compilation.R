@@ -1,5 +1,11 @@
 library(tidyverse)
 
+# if updated script - remove old version of aggregated data
+new <- FALSE
+if (new) { # remove files that were not create today
+  files <- list.files("data/derived_data/", "aggregated_data", full.names = T)
+  files[as.Date(file.info(files)$ctime) < Sys.Date()] |> file.remove()
+}
 # automate qmd compilation
 raw_data_sites <- gsub(
   "^[^_]*_[^_]*_([^_]*)_.*$", "\\1",
@@ -101,6 +107,15 @@ modelling_folder <- "D:/github/Bioforest-project/modelling/data/raw_data/"
 if (dir.exists(modelling_folder)) {
   file.copy(paste0("data/derived_data/aggregated_data_v", version, ".csv"),
     modelling_folder,
+    overwrite = TRUE
+  )
+}
+
+# copy to demography folder
+demography_folder <- "D:/github/Bioforest-project/demography/data/derived_data/"
+if (dir.exists(demography_folder)) {
+  file.copy(paste0("data/derived_data/aggregated_data_v", version, ".csv"),
+    demography_folder,
     overwrite = TRUE
   )
 }
