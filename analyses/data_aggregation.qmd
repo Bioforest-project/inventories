@@ -5,60 +5,241 @@ format:
     toc: true
     number-sections: true
     colorlinks: true
-params:
+    fig-pos: "H"
+params: 
   site: mbaiki
+  taper: false
+  print: true
+
 execute:
   echo: false      
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+knitr::opts_knit$set(
+  root.dir = rprojroot::find_rstudio_root_file(),
+  warning = FALSE, message = FALSE, results = "hide"
+)
+
 library(data.table)
 library(BIOMASS)
 library(ggplot2)
 library(tidyverse)
 library(entropart)
 library(fundiversity)
+library(patchwork)
+library(readxl)
 ```
 
 # Introduction
 
-This document is made to be used by data contributors of the Bioforest project, which is an initiative of the TmFO network. By running this quarto document, you will be able to visualize various aspects of your data, and generate an aggregated data set as output. This aggregated data set (depending on the variables available) will be used for analysis by various working groups in the Bioforest project.
+This document is intended for data contributors to the Bioforest project, an initiative of the TmFO network.
 
-Before you run this quarto script, please make sure that you complete the following checklist, and ensure the your dataset is named and structured correctly to be able to run this script.
+There are 2 ways to view this document: 
+
+1. You are viewing the PDF already generated for a dataset
+2. You have access to the Quarto script, which needs to be run with R in order to generate visual outputs or render a PDF.
+
+## If you are viewing this document as a PDF :
+
+This document will help you visualize various aspects of your data, understand the applied data correction steps, and generate an aggregated dataset. This aggregated data set (depending on the variables available) will be used for analysis by various working groups in the Bioforest project. It also facilitates feedback from Site PIs regarding any necessary changes to corrections and aggregations. We encourage every Site PI to carefully review this document and provide feedback.
+
+## If you are running the Quarto script (ignore this section if you are viewing the PDF):
+
+This script will take you through various aspects of your data, understand the applied data correction steps, visualize each step, and generate an aggregated dataset. This aggregated data set (depending on the variables available) will be used for analysis by various working groups in the Bioforest project. It also facilitates feedback from Site PIs regarding any necessary changes to corrections and aggregations. We encourage every Site PI to carefully review this document and provide feedback.
+
+Before running the Quarto script, please complete the following checklist and ensure your dataset is correctly named and structured.
 
 You should have already:
 
--   signed the data agreement;
+-   Signed the [data agreement](https://drive.google.com/file/d/1xxeE1FkkTzfnTS7iRFf3vOaOS4FclL82/view?usp=drive_link)- please ask for access to the link if you don't have it;
 
--   harmonized your **raw** dataset using the [DataHarmonization app](https://github.com/Alliance-for-Tropical-Forest-Science/DataHarmonization); the harmonized dataset should be placed in the same folder as this file;
+-   Harmonized your **raw** dataset using the [DataHarmonization app](https://github.com/Alliance-for-Tropical-Forest-Science/DataHarmonization); the harmonized dataset should be placed in the same folder as this file;
 
--   sent us your species list;
+-   Provided your species list;
 
--   added plot-level information to this [document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link).
+-   Added plot-level information to this [document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link) with the same plot names as in your dataset;
+
+-   Requested the necessary files to run this script, including taxonomic corrections and functional traits;
+
+-   Placed all required input files in the same folder;
+
+-   Named your file as: harmonized_data_site-name_versionname.csv
+
+Note: Ensure that the character strings used in your harmonized file name exactly match those in the params section at the beginning of this file.
+
+```{r get-plot-level-data}
+#| message: false
+#| warning: false
+# download from google drive
+path_metadata <- "data/raw_data/bioforest-plot-information.csv"
+if (!file.exists(path_metadata)) {
+  "1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ" |>
+    googledrive::as_id() |>
+    googledrive::drive_get() |>
+    googledrive::drive_download(
+      path = "data/raw_data/bioforest-plot-information.xlsx",
+      overwrite = TRUE
+    )
+
+  sites <- "data/raw_data/bioforest-plot-information.xlsx" |>
+    read_excel(sheet = "site_name_correction") |>
+    separate_rows(site_raw, sep = ",") |>
+    unique()
+  write.csv(sites, file = "data/raw_data/sites.csv")
+
+  # clean plot information
+  "data/raw_data/bioforest-plot-information.xlsx" |>
+    read_excel(sheet = "Sheet1") |>
+    # change site name to correspond to raw data
+    mutate(site = as.character(site)) |>
+    rename(site_raw = site) |>
+    left_join(sites) |>
+    select(-site_raw) |>
+    # remove "subplot" from Tene data
+    mutate(plot = gsub("Subplot_", "", plot)) |>
+    # add E variable for AGB allometry (from Chave et al 2014)
+    mutate(e = computeE(cbind(longitude, latitude))) |>
+    write.csv(path_metadata, row.names = FALSE)
+}
+```
+
 
 ```{r load-data}
+#| message: false
+#| warning: false
 # automate compilation for all sites with qmd params
 data_list <- list.files("data/raw_data/", params$site, full.names = TRUE)
 if (length(data_list) == 0) {
   stop("Please check that the site name in params matches your data file name.")
 }
+
+# creating a taxonomic ID to use for joining wrong and corrected taxa
+read_harmonized <- function(file) {
+  cols <- c(
+    ScientificName = NA_character_,
+    VernName = NA_character_,
+    Family = NA_character_,
+    Genus = NA_character_,
+    Species = NA_character_
+  )
+  read_csv(file,
+    locale = readr::locale(encoding = "latin1"),
+    col_types = cols()
+  ) %>%
+    add_column(!!!cols[!names(cols) %in% names(.)]) %>%
+    mutate(raw_taxonomy = paste(
+      ScientificName, "-", VernName, "-",
+      Family, Genus, Species
+    )) %>%
+    mutate(file = gsub("data/raw_data/", "", file))
+}
+
+# extracting data file and creating consistent site names
 data_raw <-
   data_list |>
-  lapply(read.csv) |>
-  rbindlist(fill = TRUE, use.names = TRUE) |>
-  as_tibble() |>
+  lapply(read_harmonized) |>
+  bind_rows() |>
+  mutate(Site = as.character(Site)) |>
+  rename(site_raw = Site) |>
+  left_join(read.csv("data/raw_data/sites.csv")) |>
+  select(-site_raw) |>
+  rename(Site = site) |>
   mutate(Plot = as.character(Plot))
 ```
 
 ```{r create-data-cor}
+#| message: false
+#| warning: false
 data_cor <- data_raw
 ```
 
+```{r merge-cleaned-taxonomy}
+#| message: false
+#| warning: false
+data_species <-
+  read_tsv("data/derived_data/taxonomy_v5.tsv") |>
+  select(contains("cleaned") | "raw_taxonomy") |>
+  unique()
+
+data_cor <- data_cor |>
+  left_join(data_species, by = c("raw_taxonomy"))
+```
+
+```{r complete-plotarea-data}
+#| message: false
+#| warning: false
+# add site if missing
+data_cor <- data_cor |>
+  mutate(Site = ifelse(is.na(Site), names(sort(table(data_raw$Site)))[1], Site))
+
+# add missing plot area
+plot_area <- data_cor |>
+  select(Site, Plot, PlotArea) |>
+  drop_na() |>
+  rename(PlotAreaUnique = PlotArea) |>
+  unique()
+
+if (any(duplicated(with(plot_area, paste(Site, Plot))))) {
+  stop(paste(
+    "The plot area information in your data is inconsistent:",
+    "some plots have different values."
+  ))
+}
+
+data_cor <- data_cor |>
+  left_join(plot_area, by = c("Site", "Plot")) |>
+  mutate(PlotArea = ifelse(!is.na(PlotAreaUnique), PlotAreaUnique, PlotArea)) |>
+  select(-PlotAreaUnique)
+
+if (any(is.na(data_cor$PlotArea))) {
+  stop(paste("Some plots are missing PlotArea values."))
+}
+
+# avoid absurd PlotArea values
+data_cor <- data_cor |>
+  mutate(PlotArea = ifelse(grepl("Tapajos", Site), 0.25, PlotArea))
+
+if (any(data_cor$PlotArea <= 0)) {
+  stop(paste("Some PlotArea values are zero or negative."))
+}
+if (any(data_cor$PlotArea > 100)) {
+  stop(paste("Some PlotArea values are > 100 ha."))
+}
+```
+
+```{r complete-other-data}
+#| message: false
+#| warning: false
+# add census year information per plot
+if (!"IdCensus" %in% colnames(data_cor)) {
+  data_cor <- mutate(data_cor, IdCensus = as.character(Year))
+}
+data_cor <- data_cor |>
+  select(Site, Plot, Year, IdCensus) |>
+  drop_na() |>
+  group_by(Site, Plot, IdCensus) |>
+  summarise(year_census = median(Year)) |>
+  right_join(data_cor) |>
+  # add missing years
+  mutate(Year = ifelse(is.na(Year), year_census, Year)) |>
+  mutate(year_census = ifelse(is.na(year_census), Year, year_census))
+```
+
 ```{r remove-values}
+#| message: false
+#| warning: false
+
+# remove missing plots (warning is given later)
+data_cor <- data_cor |>
+  filter(!is.na(Plot))
+data_cor <- data_cor |>
+  # add UPA info in Mil
+  mutate(Plot = ifelse(Site == "Mil", paste0("UPA_B_", Plot), Plot))
+
 # some values (partial censuses, etc) need to be removed in some sites
 text <- ""
-if (any(data_raw$Site == "Paracou")) {
+if (any(data_cor$Site == "Paracou")) {
   data_cor <- data_cor |>
     subset(!(Site == "Paracou" & as.numeric(Plot) == 16)) |>
     subset(!(Site == "Paracou" & (Year %in% c(1996, 1998, 2000, 2002)))) |>
@@ -69,325 +250,405 @@ if (any(data_raw$Site == "Paracou")) {
     "and census year 2010 of plot 15 (25% of the plot was not measured)."
   )
 }
+if (any(data_cor$Site == "Malinau")) {
+  data_cor <- data_cor |>
+    subset(!(Site == "Malinau" & Year == 2012))
+  text <- paste(
+    text,
+    "In Malinau, we removed the census of 2012 as discussed with the PI"
+  )
+}
 ```
 
 `r text`
 
-```{r add-plot-level-data}
-# download from google drive
-if (!file.exists("data/raw_data/bioforest-plot-information.csv")) {
-  googledrive::drive_get(
-    googledrive::as_id("1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ")
-  ) |>
-    googledrive::drive_download(
-      path = "data/raw_data/bioforest-plot-information",
-      type = "csv", overwrite = TRUE
-    )
-  # TODO solve authentication error
-}
-plot_information <- read.csv("data/raw_data/bioforest-plot-information.csv") |>
-  mutate(site = ifelse(site == "BAFOG", "Bafog", site)) |>
-  mutate(site = ifelse(site == "Montagne_tortue", "Montagne_Tortue", site)) |>
-  subset(site %in% unique(data_cor$Site))
-```
 
-```{r add-missing-plot-coordinates}
-# temporarily add plot information when missing online
-plot_information <- plot_information |>
-  mutate(
-    longitude = ifelse(site == "Kibale", 30.425, longitude),
-    latitude = ifelse(site == "Kibale", 0.45, latitude)
-  ) |>
-  # temporary: some plots in MBaiki have the switched coordinates
-  mutate(
-    latitude_cor = ifelse(site == "Mbaiki" & latitude > 4, longitude, latitude),
-    longitude_cor = ifelse(site == "Mbaiki" & latitude > 4, latitude, longitude)
-  ) |>
-  # remove "subplot" from Tene data
-  mutate(plot = gsub("Subplot_", "", plot))
-```
+```{r join-plot-information}
+#| message: false
+#| warning: false
 
-```{r add-e-var}
-# add E variable for AGB allometry (from Chave et al 2014)
-plot_information <- plot_information |>
-  mutate(e = computeE(cbind(longitude_cor, latitude_cor)))
-```
+plot_information <- read.csv(path_metadata)
 
-```{r harmonize-treatment-info}
-# harmonize treatment information as logging and silvicultural treatments (T/F)
-control_string <- "unlogged|to be logged|old-growth|control|natural"
-silv_string <- "treatment|devital|thinning"
-plot_information <- plot_information |>
-  mutate(
-    Treatment = ifelse(Treatment != "", Treatment, NA),
-    logging = !grepl(control_string, tolower(Treatment)),
-    silv_treat = grepl(silv_string, tolower(Treatment))
-  ) |>
-  ## remove plots that don't have coordinates and treatment information
-  subset(!is.na(longitude)) |>
-  select(site, plot, longitude, latitude, logging, silv_treat, e)
-```
-
-```{r remove-plots-without-coords}
 # plots that are not on the online document
 data_missing <- data_cor |>
   mutate(site = Site, plot = Plot) |>
-  select(site, plot, PlotArea) |>
+  select(site, plot) |>
   unique() |>
-  merge(plot_information, all = TRUE) |>
-  subset(is.na(longitude) | is.na(PlotArea)) |>
+  merge(plot_information, all.x = TRUE) |>
+  subset(is.na(longitude)) |>
   mutate(idplot = paste(site, plot, sep = "-"))
+
+# for sao nicolau, get the treatment information in the file name and add it to
+# the plot ID
+data_cor <- data_cor |>
+  mutate(Plot = ifelse(Site == "Sao Nicolau" & grepl("control", file),
+    paste0(Plot, "-Control"), Plot
+  )) |>
+  mutate(Plot = ifelse(Site == "Sao Nicolau" & !grepl("control", file),
+    paste0(Plot, "-Logging"), Plot
+  ))
+plot_information <- plot_information |>
+  mutate(plot = ifelse(site == "Sao Nicolau",
+    paste(plot, Treatment, sep = "-"), plot
+  ))
 
 # add plot-level information to the table
 data_cor <- data_cor |>
-  merge(plot_information, by.x = c("Site", "Plot"), by.y = c("site", "plot"))
+  merge(plot_information,
+    by.x = c("Site", "Plot"), by.y = c("site", "plot"),
+    all.x = TRUE
+  )
+
+# if no plots were found in the online document
+if (all(is.na(data_cor$e))) {
+  stop(paste0(
+    "Please check the information (site name, plot names and coordinates) ",
+    "on the online document: https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link" # nolint
+  ))
+}
+
+# if some plots have coordinates but not all: use mean value of E for plots with
+# missing coordinates
+data_cor <- data_cor |>
+  mutate(e = ifelse(is.na(e), mean(data_cor$e, na.rm = TRUE), e))
 
 missing <- paste(subset(data_missing, is.na(longitude))$idplot, collapse = ", ")
 
 text <- ifelse(
   nchar(missing) > 0,
   paste0(
-    "The following plots have missing coordinates and have been removed from",
-    "the analysis: ", missing, "."
+    "The following plots in the dataset have missing coordinates: ", missing,
+    ". We used the average value for variable E in other plots (E = ",
+    round(mean(data_cor$e, na.rm = TRUE), 4), ")."
   ),
-  "All plots have coordinates."
+  "All plots in the dataset have coordinates."
 )
-if (nrow(data_cor) == 0) {
-  stop(paste0(
-    "Please check the information (coordinates and treatment) ",
-    "on the online document: https://docs.google.com/spreadsheets/d/",
-    "1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link"
-  ))
-}
 ```
+`r text`
+
+
+# General presentation of the data
+
+This document presents the data aggregation for the `r paste(unique(data_cor$Site), collapse = ", ")` site, with `r length(unique(data_cor$Plot))` plots, measured between `r min(data_cor$Year)` and `r max(data_cor$Year)`.
 
 `r text`
 
 If needed, you can add any missing information to the [online document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link) or check that the site and plot names are consistent between your harmonized data and the online document.
 
-# General presentation of the data
+The dataset has `r dim(data_cor)[1]` observations, belonging to `r length(unique(data_cor$IdStem))` stems including he following life forms: `r unique(data_cor$LifeForm)`.
 
-This document presents the data aggregation for the `r paste(unique(data_cor$Site), collapse = ", ")` site(s). The site(s) have `r length(unique(data_cor$Plot))` plots: `r unique(data_cor$Plot)`.
+## Summary of plots and censuses
 
-It has `r dim(data_cor)[1]` observations, belonging to `r length(unique(data_cor$IdStem))` stems.
-
-The following table shows the number of censuses per plots.
+The following table shows the number of censuses per plots, the first and last year of census. If you feel like the information is not accurate, please let us know.
 
 ```{r show-census-count}
+#| message: false
+#| warning: false
 data_cor %>%
   group_by(Site, Plot) %>%
-  summarise(number_of_censuses = length(unique(IdCensus))) %>%
-  knitr::kable()
+  summarise(
+    number_of_censuses = length(unique(IdCensus)),
+    first_census = min(Year),
+    last_census = max(Year)
+  ) %>%
+  knitr::kable(col.names = c(
+    "Site", "Plot", "Number of censuses",
+    "First census", "Last census"
+  ))
 ```
 
-Censuses were conducted between `r min(data_cor$Year)` and `r max(data_cor$Year)`.
+```{r}
+text <- ""
+if (any(is.na(data_raw$Plot))) {
+  text <- data_raw |>
+    filter(is.na(Plot)) |>
+    summarise(n_distinct(IdTree)) |>
+    paste("trees don't have a plot ID.")
+}
+```
+`r text`
 
-*Please add a comment on question XXXX of the survey, if there are missing plots or censuses.*
+*Please let us know if there are missing plots or censuses.*
+
+The following figures show the location of each plot as indicated by you in the [online document](https://docs.google.com/spreadsheets/d/1fq2owxMBLBwwibcdw2uQQFxnIhsMbaH4Qcj_xUwVvSQ/edit?usp=drive_link), as well as the censuses in which each plot was measured.
+
+```{r maps-visual}
+#| message: false
+#| warning: false
+
+if (params$print) {
+  # Maps per plot and per census
+  map <- data_cor |>
+    select(Plot, longitude, latitude) |>
+    unique() |>
+    ggplot(aes(
+      x = longitude, y = latitude,
+      color = as.factor(Plot)
+    )) +
+    geom_point(alpha = 0.6, show.legend = FALSE) +
+    # facet_wrap(~ Year) +
+    labs(
+      title = "Map of Plots",
+      x = "Longitude",
+      y = "Latitude",
+      color = "Plot ID"
+    ) +
+    coord_equal() +
+    theme_minimal()
+
+  plots <- data_cor |>
+    select(Plot, Year) |>
+    unique() |>
+    ggplot(aes(x = Year, y = Plot, color = as.factor(Plot))) +
+    geom_point(alpha = 0.6, show.legend = FALSE) +
+    scale_y_discrete(breaks = c(
+      min(data_cor$Plot),
+      median(data_cor$Plot),
+      max(data_cor$Plot)
+    )) +
+    labs(
+      title = "Plots censused across years",
+      x = "Year",
+      y = "Plot number",
+      color = "Plot ID"
+    ) +
+    theme_minimal()
+
+  (map + plots)
+}
+```
+
+## Taxonomic identification
+
+The taxonomic identification resolution of each site is different, so we try to identify this level, and ensure that it is not what is far from expected.
+
+Most sites have separate columns with the species vernacular names, and scientific names. For the purpose of this project, we hope to extract maximum possible information using both names. However, we only use scientific names further in this document.
+
+```{r}
+#| warning: false
+# add scientific names of unidentified stems based on vernacular names
+# (only for French Guiana sites)
+
+if (params$site %in% c("paracou", "montagne-tortue", "bafog", "manare")) {
+  vern <- data_cor |>
+    select(VernName, scientific_cleaned) |>
+    drop_na() |>
+    subset(VernName != "-" &
+      !str_detect(substr(VernName, 1, 1), "[[:upper:]]")) |> # nolint
+    group_by(VernName) |>
+    summarise(scientific_vern = names(
+      sort(table(scientific_cleaned), decreasing = TRUE)
+    )[1]) |>
+    separate(scientific_vern, c("genus_vern", "species_vern"), remove = FALSE)
+
+  data_cor <- merge(data_cor, vern, all.x = TRUE)
+  data_cor <- data_cor |>
+    mutate(scientific_cleaned = ifelse(
+      is.na(scientific_cleaned),
+      scientific_vern,
+      scientific_cleaned
+    )) |>
+    mutate(genus_cleaned = ifelse(
+      is.na(genus_cleaned),
+      genus_vern,
+      genus_cleaned
+    )) |>
+    mutate(species_cleaned = ifelse(
+      is.na(species_cleaned),
+      species_vern,
+      species_cleaned
+    ))
+
+  text <- paste(
+    "For sites in French Guiana, where there is information on the",
+    "vernacular name but not on the scientific name, we add the scientific
+    name",
+    "that was most frequently associated to that vernacular name in the rest",
+    "of the dataset."
+  )
+} else {
+  text <- "If your site has only vernacular names, and if you have any
+  information for the corresponding scientific names, please contact us to
+  include the table in our analysis."
+}
+```
+
+`r text`
+
+```{r na-sp}
+#| message: false
+#| warning: false
+if (anyNA(data_cor$scientific_cleaned)) {
+  nb_na_sp <- sum(is.na(data_cor$scientific_cleaned))
+  perc_na_sp <- round(
+    sum(is.na(data_cor$scientific_cleaned)) * 100 / dim(data_cor)[1], 2
+  )
+  nb_na_sp_tree <- data_cor %>%
+    filter(is.na(scientific_cleaned)) %>%
+    summarise((length(unique(paste(Site, Plot, Subplot, IdTree)))))
+  text <- paste(
+    "In this dataset, there are",
+    nb_na_sp,
+    "observations with NAs in the scientific names, which represent",
+    perc_na_sp,
+    "% of the observations. This concerns",
+    nb_na_sp_tree,
+    "trees."
+  )
+} else {
+  text <- "There are no unidentified trees."
+}
+```
+
+`r text`
+
+Here we have a figure showing the resolution of taxonomic identification in the data provided.
+
+If you notice an inconsistency in this information, please let us know.
+
+```{r display-taxo-resolution}
+#| message: false
+#| warning: false
+#| fig.width: 10
+#| fig.height: 8
+
+if (params$print) {
+  # Create plot
+  for (i in unique(data_cor$Site)) {
+    data_cor |>
+      filter(Site == i) |>
+      group_by(Site, Plot, Year) |>
+      summarise(
+        Undetermined = sum(is.na(genus_cleaned)) / length(genus_cleaned),
+        `Genus Only` = sum(!is.na(genus_cleaned) & is.na(species_cleaned))
+        / length(genus_cleaned),
+        Species = sum(!is.na(species_cleaned)) / length(species_cleaned)
+      ) |>
+      pivot_longer(cols = c("Undetermined", "Genus Only", "Species")) |>
+      mutate(
+        name = factor(name, levels = c("Undetermined", "Genus Only", "Species"))
+      ) |>
+      ggplot(aes(as.character(Year), value, fill = name)) +
+      geom_col() +
+      facet_wrap(~Plot,
+        scales = "free_y",
+        labeller = label_both
+      ) +
+      scale_y_continuous(breaks = c(0, 0.5, 1)) +
+      labs(
+        fill = "ID level",
+        title = paste("Proportion of taxonomic ID resolution -", i)
+      ) +
+      labs(x = NULL, y = NULL) +
+      theme_minimal() +
+      theme(legend.position = "bottom") +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+      ) +
+      scale_fill_manual(values = c("#D53E4F", "#FEE08B", "#3288BD"))
+  }
+}
+```
 
 # Check data consistency
 
-This step checks for the absence of "anomalies" in the data.
-
-## Avoid duplicated measurements
-
-We paste the name of the site, plot, subplot and tag/ID of the tree and stem to create a new unique identifier for each stem.
-
-```{r complete-idstem}
-data_cor <- data_cor |>
-  mutate(IdStem = paste(Site, Plot, Subplot, IdTree, IdStem, sep = "_"))
-```
-
-We then check that there are no duplicated measurements for the same stem ID in a given census.
-
-```{r check-duplicated-stems}
-#| eval: false
-
-# Make a dummy data set to test
-dupl <- slice_sample(data_cor, n = 15) # some duplicated
-dupl <- dupl %>%
-  mutate(Diameter = replace(
-    Diameter, IdStem == dupl$IdStem[1],
-    dupl$Diameter[1] + 10
-  )) # one duplicated with different DBH
-data_cor <- rbind(data_cor, dupl)
-data_cor <- rbind(data_cor, slice_sample(dupl, n = 3)) # some duplicated twice
-dupl_sev_census <- data_cor %>%
-  filter(IdStem == dupl$IdStem[2]) %>%
-  slice_sample(, n = 2) # one IDstem with several duplicated censuses
-data_cor <- rbind(data_cor, dupl_sev_census)
-```
-
-```{r print-duplicated-stems}
-nb_stem_plot <- data_cor %>%
-  count(IdStem, IdCensus)
-
-if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
-  text <- "There is no duplicated stem identifiers within a same census."
-} else {
-  stem_dupli <- nb_stem_plot %>%
-    filter(n > 1)
-  text <- paste("There are ",
-    dim(stem_dupli)[1],
-    " cases of duplicated stem identifiers within a same census,",
-    " with a number of duplications ranging from ",
-    stem_dupli %>% summarise(min(n)),
-    " and ",
-    stem_dupli %>% summarise(max(n)),
-    " (mean = ",
-    stem_dupli %>% summarise(round(mean(n), 2)),
-    "). These duplications concern ",
-    length(unique(stem_dupli$IdStem)),
-    " stems.",
-    sep = ""
-  )
-}
-```
-
-`r text`
-
-```{r rmv-full-duplicated-stems}
-if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
-  prev_nb_obs <- dim(data_cor)[1]
-  data_cor <- data_cor %>% distinct() # remove fully duplicated rows
-  # if there were some fully duplicated rows:
-  if (prev_nb_obs - dim(data_cor)[1] != 0) {
-    text <- paste(
-      prev_nb_obs - dim(data_cor)[1],
-      "rows are true duplicates (fully identical rows).",
-      "These true duplicates are removed from the dataset,",
-      "leaving a dataset of", dim(data_cor)[1], "observations."
-    )
-  } else {
-    text <- ""
-  }
-  nb_stem_plot_bis <- data_cor %>%
-    count(IdStem, IdCensus)
-} else { # if no duplicated rows
-  text <- ""
-}
-```
-
-`r text`
-
-```{r remaining-duplicated-stems}
-if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
-  if (all(
-    length(unique(nb_stem_plot_bis$n)) == 1,
-    unique(nb_stem_plot_bis$n) == 1
-  )) {
-    text <- "There is no more duplicated stem identifiers within a same census."
-    still_stem_dupli <- FALSE
-  } else {
-    stem_dupli_bis <- nb_stem_plot_bis %>%
-      filter(n > 1)
-    text <- paste(
-      "There are still",
-      dim(stem_dupli_bis)[1],
-      "cases of duplicated stem identifiers within a same census,",
-      "which are not fully replicated rows.",
-      "This concern the following cases:"
-    )
-    still_stem_dupli <- TRUE
-  }
-} else {
-  still_stem_dupli <- FALSE
-}
-```
-
-`r text`
-
-```{r print-remaining-duplicated-stems}
-if (still_stem_dupli == TRUE) {
-  stem_dupli_bis %>%
-    select(IdStem, IdCensus) %>%
-    knitr::kable()
-}
-```
-
-```{r warn-remaining-duplicated-stems}
-if (still_stem_dupli == TRUE) {
-  text <- paste(
-    "IMPORTANT: Please check these cases in your raw data before starting the",
-    "process again. For now, we have only kept the first measurement of these",
-    "duplicate stems, but please let us know how we can better deal with these",
-    "duplicate measurements."
-  )
-  data_cor <- data_cor |>
-    subset(!duplicated(paste(IdStem, IdCensus)))
-} else {
-  text <- ""
-}
-```
-
-`r text`
-
-### Are there multi-stemmed trees?
-
-```{r check-multi-stems}
-#| message: false
-#| warning: false
-data_nstem <- data_cor |>
-  group_by(Site, Plot, Subplot, IdTree) |>
-  summarise(nstem = length(unique(IdStem)))
-if (all(data_nstem$nstem == 1)) {
-  print(paste(
-    "The number of stem identifiers and the number of tree identifiers are",
-    "equal, suggesting either that there are no multi-stemmed trees, or",
-    "that the multiple stems are considered as different individuals."
-  ))
-} else {
-  print("The following trees have multiple stems:")
-  data_nstem |>
-    subset(nstem > 1) |>
-    knitr::kable()
-}
-```
+This step checks for any anomalies in the data, that needs to be removed from the dataset, or modified.
 
 ## Consistency of diameter measurements
 
-### Remove missing (NA) DBH values
+In this step, we will ensure the consistency of diameter measurements.
+
+### Missing (NA) and zeros in DBH values
+
+If this dataset contains any NAs or zeros, we will remove them in this step.
 
 ```{r check-na-dbh}
+#| message: false
+#| warning: false
 if (anyNA(data_cor$Diameter)) {
   nb_na_dbh <- sum(is.na(data_cor$Diameter))
   perc_na_dbh <- round(
     sum(is.na(data_cor$Diameter)) * 100 / dim(data_cor)[1],
     2
   )
-  text <- paste("There are",
+  text <- paste0(
+    "In this dataset, there are ",
     nb_na_dbh,
-    "missing diameters in the data, which represent",
+    " missing diameters in the data, which represent ",
     perc_na_dbh,
-    "% of the observations.",
-    "The missing values are distributed across the plots",
-    "and censuses as follow:",
-    sep = " "
+    "% of the observations."
   )
 } else {
-  text <- "There are no missing diameter in the data."
+  text <- "In this dataset, there are no missing diameters in the data."
 }
 ```
 
 `r text`
 
-```{r print-na-dbh}
-if (anyNA(data_cor$Diameter)) {
-  data_cor %>%
-    filter(is.na(Diameter)) %>%
-    count(Plot, IdCensus) %>%
-    pivot_wider(names_from = Plot, values_from = n) %>%
-    knitr::kable()
+```{r check-zero-dbh}
+#| message: false
+#| warning: false
+if (sum(data_cor$Diameter == 0, na.rm = TRUE) > 0) {
+  nb_zero_dbh <- sum(data_cor$Diameter == 0, na.rm = TRUE)
+  perc_zero_dbh <- round(
+    sum(data_cor$Diameter == 0, na.rm = TRUE) * 100 / dim(data_cor)[1],
+    2
+  )
+  text <- paste0(
+    "In this dataset, there are ",
+    nb_zero_dbh,
+    " diameters with the value zero in the data, which represent ",
+    perc_zero_dbh,
+    "% of the observations."
+  )
+} else {
+  text <- "In this dataset, there are no zeros in the diameters in the data."
 }
 ```
 
-We first remove all measures with either DBH = 0 cm or NA values.
+`r text`
 
-```{r remove-na-dbh}
+```{r na-zero-dbh}
+#| message: false
+#| warning: false
+
+missing_values <- data_cor %>%
+  filter(is.na(Diameter) | Diameter == 0) %>%
+  group_by(Site, Plot, Year) %>%
+  summarise(
+    NAs = sum(is.na(Diameter)),
+    Zeros = sum(!is.na(Diameter) & Diameter == 0)
+  )
+
+if (sum(missing_values$NAs) == 0) missing_values$NAs <- NULL
+if (sum(missing_values$Zeros) == 0) missing_values$Zeros <- NULL
+
+text <- ""
+if (any(colnames(missing_values) %in% c("Zeros", "NAs"))) {
+  text <- "Values are distributed in the dataset as follows:"
+}
+```
+
+`r text`
+
+```{r print-na-zero-dbh}
+missing_values %>%
+  knitr::kable()
+```
+
+```{r remove-na-zero-dbh}
+#| message: false
+#| warning: false
+
 data_cor <- data_cor |>
   subset(Diameter > 0 & !is.na(Diameter))
 ```
 
-### All trees above the DBH cutoff
+As we have removed all the NAs and zeros, the DBH values in this dataset are NA and zero free.
+
+### Check DBH cutoff
+
+In this project, we are using various datasets from across the world which have different DBH limits. We want to ensure that there is one DBH cutoff throughout the data.
 
 ```{r get-dbh-cutoff}
 #| message: false
@@ -396,7 +657,7 @@ if (length(unique(data_cor$MinDBH)) == 1) {
   text <- paste(
     "There is a single DBH cutoff set to",
     unique(data_cor$MinDBH),
-    "cm for the whole data set."
+    "cm for this entire data set."
   )
 } else {
   # count the number of cutoff > 10 cm per plot and census
@@ -405,7 +666,7 @@ if (length(unique(data_cor$MinDBH)) == 1) {
     summarise(n_cutoff_sup_10 = length(unique(MinDBH[MinDBH > 10])))
   if (all(cutoff_plot_cens$n_cutoff_sup_10 == 0)) {
     text <- paste(
-      "All DBH cutoffs are at 10 cm or below;",
+      "In this dataset, all DBH cutoffs are at 10 cm or below;",
       "we will only use stems > 10 cm DBH."
     )
   } else {
@@ -413,7 +674,7 @@ if (length(unique(data_cor$MinDBH)) == 1) {
       subset(n_cutoff_sup_10 > 0) |>
       mutate(idplot = paste(Site, Plot, sep = "-"))
     text <- paste(
-      "The following plots have one or more DBH cutoffs",
+      "In this dataset, the following plots have one or more DBH cutoffs",
       "above 10 cm DBH:",
       paste(data_above_10$idplot, collapse = ", ")
     )
@@ -426,16 +687,19 @@ if (length(unique(data_cor$MinDBH)) == 1) {
 ```{r print-dbh-cutoff}
 #| message: false
 #| warning: false
-if (length(unique(data_cor$MinDBH)) != 1) {
+if (length(unique(data_cor$MinDBH)) != 1 && isTRUE(params$print)) {
   data_cor %>%
     group_by(Site, Plot, IdCensus) %>%
     summarise(dbhcut = unique(MinDBH)) %>%
-    # pivot_wider(names_from = Plot, values_from = dbhcut) %>%
     knitr::kable()
 }
 ```
 
+As mentioned above, to maintain consistency, we will remove all stems below 10 cm, if there are any.
+
 ```{r remove-dbh-below-cutoff}
+#| message: false
+#| warning: false
 if (with(data_cor, !any(Diameter < MinDBH | Diameter < 10))) {
   text <- "There are no stems with a DBH below the DBH cutoff or below 10 cm."
 } else {
@@ -473,107 +737,228 @@ data_cor <- data_cor %>% filter(Diameter >= MinDBH & Diameter >= 10)
 
 `r text`
 
-## Clean species information
+## Avoid duplicated measurements
 
-```{r clean-species-information}
-# clean columns with taxonomic information (vernacular and scientific)
-if (!"VernName" %in% colnames(data_cor)) data_cor$VernName <- NA
-if (!"ScientificName" %in% colnames(data_cor)) data_cor$ScientificName <- NA
+We want to make sure that there are no duplicated measurements in the data. So we create a unique identifier for each stem by combining the name of the site, plot, subplot and tag/ID of the tree and stem. We then check that there are no duplicated measurements for the same stem ID in a given census.
 
-data_cor <- data_cor |>
-  mutate(
-    VernName = iconv(VernName, "UTF-8", "ASCII//TRANSLIT"),
-    ScientificName = iconv(ScientificName, "UTF-8", "ASCII//TRANSLIT")
-  ) |>
-  separate(VernName,
-    sep = "\\[|\\]", c("vernname_1", "vernname_2"),
-    extra = "drop", fill = "left", remove = FALSE
-  ) |>
-  mutate(
-    ScientificName = ifelse(
-      is.na(ScientificName) | grepl("\\[", ScientificName),
-      vernname_2, ScientificName
-    ),
-    vernname_1 = NULL,
-    vernname_2 = NULL
-  )
+If we find duplicates, only the first observation is retained in the data.
 
-# add genus and vername columns if missing
-if (!"Genus" %in% colnames(data_cor)) {
+```{r get-stem-id-iwokrama}
+if (any(data_cor$Site == "Iwokrama")) {
   data_cor <- data_cor |>
-    separate(ScientificName, "Genus", extra = "drop", remove = FALSE)
-}
-```
-
-```{r add-clean-taxonomy}
-# add clean species information
-data_species <-
-  read.delim("data/derived_data/taxonomy_v2.tsv") |>
-  select(contains("cleaned") | contains("genus") | contains("species")) |>
-  unique()
-
-data_cor <- data_cor |>
-  separate(ScientificName, c("genus_raw", "species_raw"),
-    extra = "drop", fill = "right", remove = FALSE
-  ) |>
-  merge(data_species,
-    by = c("genus_raw", "species_raw"),
-    all.x = TRUE
-  )
-```
-
-### Level of taxonomic resolution
-
-```{r na-sp}
-if (anyNA(data_cor$scientific_cleaned)) {
-  nb_na_sp <- sum(is.na(data_cor$scientific_cleaned))
-  perc_na_sp <- round(
-    sum(is.na(data_cor$scientific_cleaned)) * 100 / dim(data_cor)[1], 2
-  )
-  nb_na_sp_tree <- data_cor %>%
-    filter(is.na(ScientificName)) %>%
-    summarise((length(unique(IdTree))))
-  text <- paste("There are",
-    nb_na_sp,
-    "observations with NAs in the scientific names, which represent",
-    perc_na_sp,
-    "% of the observations.
-    This concerns",
-    nb_na_sp_tree,
-    "trees.",
-    "The observations with NAs in the scientific names
-    are distributed across the plots and censuses as follow:",
-    sep = " "
+    mutate(IdTree = NULL) |>
+    separate_wider_delim(IdStem, "_", names = c("IdTree", NA, NA, "IdStem", NA))
+  text <- paste(
+    "In Iwokrama, we have removed census year information from the",
+    "stem ID so that measurements of the same stem can be matched",
+    "across censuses."
   )
 } else {
-  text <- "There are no unidentified trees."
+  text <- ""
 }
 ```
 
 `r text`
 
-```{r  display-taxo-resolution}
-data_cor |>
-  group_by(Site, Plot, Year) |>
-  summarise(
-    pundet = sum(is.na(genus_cleaned)) / length(genus_cleaned),
-    pgenus = sum(!is.na(genus_cleaned) & is.na(species_cleaned))
-    / length(genus_cleaned),
-    pspecies = sum(!is.na(species_cleaned)) / length(species_cleaned)
-  ) |>
-  pivot_longer(cols = c("pundet", "pgenus", "pspecies")) |>
-  ggplot(aes(Year, value, fill = name)) +
-  geom_col() +
-  facet_wrap(~Plot) +
-  theme_minimal()
+```{r complete-idstem}
+#| message: false
+#| warning: false
+data_cor <- data_cor |>
+  mutate(IdTree = paste(Site, Plot, Subplot, IdTree, sep = "_")) |>
+  mutate(IdStem = paste(IdTree, IdStem, sep = "_"))
 ```
 
-## Remove measurements other than live trees
+```{r print-duplicated-stems}
+#| message: false
+#| warning: false
+nb_stem_plot <- data_cor %>%
+  count(IdStem, IdCensus)
+
+if (all(length(unique(nb_stem_plot$n)) == 1, unique(nb_stem_plot$n) == 1)) {
+  text <- ""
+} else {
+  stem_dupli <- nb_stem_plot %>%
+    filter(n > 1)
+  text <- paste("In this dataset, there are ",
+    dim(stem_dupli)[1],
+    " cases of duplicated stem identifiers within a same census,",
+    " with duplications. These duplications concern ",
+    length(unique(stem_dupli$IdStem)),
+    " stems.",
+    sep = ""
+  )
+}
+```
+
+`r text`
+
+```{r rmv-full-duplicated-stems}
+#| message: false
+#| warning: false
+if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
+  prev_nb_obs <- dim(data_cor)[1]
+  data_cor <- data_cor %>% distinct() # remove fully duplicated rows
+  # if there were some fully duplicated rows:
+  if (prev_nb_obs - dim(data_cor)[1] != 0) {
+    text <- paste(
+      prev_nb_obs - dim(data_cor)[1],
+      "rows are true duplicates (fully identical rows).",
+      "These true duplicates are removed from the dataset,",
+      "leaving a dataset of", dim(data_cor)[1], "observations."
+    )
+  } else {
+    text <- ""
+  }
+  nb_stem_plot_bis <- data_cor %>%
+    count(IdStem, IdCensus)
+} else { # if no duplicated rows
+  text <- paste(
+    "We checked for true duplicates (fully identical rows), and",
+    "there are none in this dataset."
+  )
+}
+```
+
+`r text`
+
+```{r remaining-duplicated-stems}
+#| message: false
+#| warning: false
+text <- ""
+if (length(unique(nb_stem_plot$n)) != 1) { # if there are some duplicates
+  if (all(
+    length(unique(nb_stem_plot_bis$n)) == 1,
+    unique(nb_stem_plot_bis$n) == 1
+  )) {
+    still_stem_dupli <- FALSE
+  } else {
+    stem_dupli_bis <- nb_stem_plot_bis %>%
+      filter(n > 1)
+    text <- paste(
+      "In this dataset, there are still",
+      dim(stem_dupli_bis)[1],
+      "cases of duplicated stem identifiers within the same census,",
+      "which are not fully replicated rows."
+    )
+    if (dim(stem_dupli_bis)[1] < 20) {
+      text <- paste("This concern the following cases:")
+      still_stem_dupli <- TRUE
+    } else {
+      still_stem_dupli <- TRUE
+    }
+  }
+} else {
+  still_stem_dupli <- FALSE
+}
+```
+
+`r text`
+
+```{r print-remaining-duplicated-stems}
+#| message: false
+#| warning: false
+text <- ""
+if (still_stem_dupli == TRUE) {
+  if (dim(stem_dupli_bis)[1] > 20) {
+    text <- paste(
+      # "There are still ", nrow(stem_dupli_bis), " stem duplicates. ",
+      "As the number is too high, we are unable to print all the stem names, and
+      will print only the first 10 rows.",
+      "Please check your data or discuss with us on why this might be happening.
+      "
+    )
+    stem_dupli_bis[1:10, ] %>%
+      select(IdStem, IdCensus) %>%
+      knitr::kable()
+  } else {
+    stem_dupli_bis %>%
+      select(IdStem, IdCensus) %>%
+      knitr::kable()
+  }
+}
+```
+
+`r text`
+
+```{r warn-remaining-duplicated-stems}
+#| message: false
+#| warning: false
+text <- ""
+if (still_stem_dupli == TRUE) {
+  text <- paste(
+    "IMPORTANT: Please check these cases in your raw data before starting the",
+    "process again. For now, we have only kept the first measurement of these",
+    "duplicate stems, but please let us know how we can better deal with these",
+    "duplicate measurements."
+  )
+  data_cor <- data_cor |>
+    subset(!duplicated(paste(IdStem, IdCensus)))
+} else {
+  text <- "There are no more duplicates measurements in this dataset.
+  We will now move on to checking for multi-stemmed trees."
+}
+```
+
+`r text`
+
+## Check multi-stemmed trees
+
+The next step is to make sure the dataset as a realistic number of multi-stem trees.
+
+```{r check-multi-stems}
+#| message: false
+#| warning: false
+data_nstem <- data_cor |>
+  group_by(Site, Plot, Subplot, IdTree) |>
+  summarise(nstem = length(unique(IdStem)))
+if (all(data_nstem$nstem == 1)) {
+  text <- paste(
+    "In this dataset, the number of stem identifiers and the number of tree",
+    "identifiers are equal, suggesting either that there are no multi-stemmed",
+    "trees, or that the multiple stems are considered as different individuals."
+  )
+} else {
+  text <- "In this dataset, the following trees have multiple stems:"
+}
+```
+
+`r text`
+
+```{r}
+#| message: false
+#| warning: false
+text <- ""
+if (any(data_nstem$nstem != 1)) {
+  multi_stemmed <- subset(data_nstem, nstem > 1)
+  if (nrow(multi_stemmed) <= 10) {
+    multi_stemmed |>
+      knitr::kable()
+  } else {
+    text <- paste(
+      "There are", nrow(multi_stemmed), "multi-stemmed trees.",
+      "As the number is too high, we are unable to print all the stem names,
+      and we are printing only the first 10 rows.",
+      "Please check your data or discuss with us if this is to be expected."
+    )
+    multi_stemmed[(1:10), ] |>
+      knitr::kable()
+  }
+}
+```
+
+`r text`
+
+## Keep only live trees
+
+We want to ensure that this dataset contains only live trees, so we carry out 2 steps:
 
 ### Remove dead trees
 
 ```{r remove-dead}
+#| message: false
+#| warning: false
 alive <- c(1:4, TRUE, NA, "Normal", "Recruit")
+text <- ""
 # embrapa sites : CIF <= 5: live trees
 if ("LifeStatus" %in% colnames(data_cor)) {
   n_dead <- sum(!data_cor$LifeStatus %in% alive)
@@ -595,307 +980,260 @@ if ("LifeStatus" %in% colnames(data_cor)) {
   }
 
   data_cor <- data_cor |> subset(LifeStatus %in% alive)
-  # TODO: ask for life status codes per site?
 } else {
   text <- paste(
-    "There was no column 'LifeStatus' with information about life status",
-    "(dead/alive), so we considered all stems to be alive: please let us know",
-    "if we should have used another column."
+    "In this dataset, there was no column 'LifeStatus' with information about",
+    "life status (dead/alive), so we considered all stems to be alive: please",
+    "let us know if we should have used another column."
+  )
+}
+```
+
+The first step is to remove all the dead individuals if there is a column called "LifeStatus". We keep the rows with the character strings: `r paste(alive, collapse = ", ")`. If your dataset has any other code to represent live/dead trees, please let us know.
+
+`r text`
+
+```{r}
+#| message: false
+#| warning: false
+
+text <- ""
+if (any(data_cor$Site == "STREK")) {
+  # in strek, dead trees are marked with the code 999 in their DBH
+  data_cor <- data_cor |>
+    filter(!grepl("999", Diameter) & !grepl("999", Circ))
+  text <- paste(
+    "In STREK, we removed all trees with diameter or circumference",
+    "values containing 999 as they are considered dead."
   )
 }
 ```
 
 `r text`
 
-### Remove life forms other than trees (lianas, palms, etc)
+### Remove life forms other than trees
+
+The second step is to remove any other life forms apart from trees, such as Lianas, palms, cacti etc. We use the column "LifeForm" when present, and remove the rows with names: "palm","palms", "tree fan", "death", "vine", "vines", "lianas". If your dataset has other life forms to remove, please let us know.
 
 ```{r select-life-form}
-data_cor <- data_cor |>
-  # subsetting to remove life forms other
-  subset(!(tolower(LifeForm) %in% c("palm", "tree fan", "death", "vine"))) |>
-  # remove palm genera or vernacular names
-  subset(family_cleaned != "Arecaceae" | is.na(family_cleaned)) |>
-  # Astrocaryum vernacular name in Paracou, only identified to vern name
-  subset(is.na(VernName) | VernName != "murumuru")
-```
+#| message: false
+#| warning: false
+text <- ""
+if ("LifeForm" %in% colnames(data_cor)) {
+  data_cor <- data_cor |>
+    mutate(lifeform = tolower(gsub("s$", "", LifeForm))) |>
+    mutate(lifeform = ifelse(
+      (!is.na(family_cleaned) & family_cleaned == "Arecaceae") |
+        # Astrocaryum vernacular name in Paracou, only identified to vern name
+        (!is.na(VernName) & VernName == "murumuru"), "palm", lifeform
+    ))
 
-## Consistency of stem-level information
-
-### Only one scientific name per tree
-
-This step adds two columns to the dataset:
-
--   ScientificName_cor : corrected scientific name, see SpName_codecor to know how it was filled.
-
--   SpName_codecor : the type of correction that has been done:
-
--   "no_cor" when there was no problem,
-
--   "gapfilled" observations with NA in the ScientificName, but for which other observations of the same trees have a unique ScientificName. These cases were gapfilled by putting the scientific name of the other observations in ScientificName_cor
-
--   "more than one scientific name" for observations of individuals with at least 2 different (non NA) scientific names. As we cannot know which is correct, all observations of the given individuals are set to NA.
-
-> To discuss : it would be worth gapfilling the scientific name when some obs are indet. as well, But I don't know if the Inded are always coded the same, and how...
-
-```{r dummy-sp-dupl}
-#| eval: false
-
-# create a dummy dataset to test (works for Mbaiki but probably not for all)
-set.seed(55)
-# add a different species names for one census
-# of a tree with NA in ScientificName
-sample_temp <- data_cor %>%
-  filter(is.na(ScientificName)) %>%
-  slice_sample(, n = 1) %>%
-  select(IdCensus, IdStem)
-data_cor <- data_cor %>%
-  mutate(ScientificName = replace(ScientificName,
-    (IdCensus == sample_temp$IdCensus & IdStem == sample_temp$IdStem),
-    values = "Bla blabbla"
-  ))
-# add a different species names for one census
-# of a tree with not an NA in ScientificName
-sample_temp2 <- data_cor %>%
-  filter(!(is.na(ScientificName))) %>%
-  slice_sample(, n = 1) %>%
-  select(IdCensus, IdStem)
-data_cor <- data_cor %>%
-  mutate(ScientificName = replace(ScientificName,
-    (IdCensus == sample_temp2$IdCensus & IdStem == sample_temp2$IdStem),
-    values = "Bli blibbli"
-  ))
-# add two differents species names for a tree that
-# is not NA (so will have 3 species names in total)
-sampleInd <- data_cor %>% # nolint
-  filter(!(is.na(ScientificName))) %>%
-  select(IdTree) %>%
-  sample_n(, size = 1) %>%
-  as.numeric()
-sampleCens <- data_cor %>% # nolint
-  filter(IdTree == sampleInd) %>%
-  select(IdCensus) %>%
-  sample_n(, size = 2) %>%
-  as.vector()
-data_cor <- data_cor %>%
-  mutate(ScientificName = replace(
-    ScientificName,
-    (IdCensus == sampleCens$IdCensus[1] & IdTree == sampleInd),
-    values = "Blu blubblu"
-  ))
-data_cor <- data_cor %>%
-  mutate(ScientificName = replace(
-    ScientificName,
-    (IdCensus == sampleCens$IdCensus[2] & IdTree == sampleInd),
-    values = "Blo blobblo"
-  ))
-# data_cor %>% filter(ScientificName %in% c("Bla blabbla", "Bli blibbli", "Blu blubblu", "Blo blobblo")) %>%  select(IdTree) # nolint
-```
-
-```{r one-sp-per-tree}
-nb_sp_tree <- data_cor %>%
-  group_by(IdTree) %>%
-  summarise(nbsp = length(unique(ScientificName)))
-
-data_cor <- data_cor %>% mutate(
-  ScientificName_cor = as.character(NA),
-  SpName_codecor = as.factor(NA)
-)
-
-# when there is just one scientific name for all the observation of a given tree
-tree_no_cor <- nb_sp_tree %>% filter(nbsp == 1)
-# use the ScientificNames as the corrected one
-data_cor <- data_cor %>%
-  mutate(ScientificName_cor = ifelse(IdTree %in% tree_no_cor$IdTree,
-    ScientificName,
-    ScientificName_cor
-  ))
-# fill in the code_cor
-data_cor <- data_cor %>%
-  mutate(SpName_codecor = ifelse(IdTree %in% tree_no_cor$IdTree,
-    "no_cor",
-    SpName_codecor
-  ))
-
-# When there are two scientific names
-tree_2_sp <- nb_sp_tree %>% filter(nbsp == 2)
-for (i in tree_2_sp$IdTree) {
-  names2 <- data_cor %>%
-    filter(IdTree == i) %>%
-    reframe(names = unique(ScientificName))
-  if (any(is.na(names2))) { # if one of the two names is NA
-    data_cor <- data_cor %>%
-      mutate(ScientificName_cor = ifelse(IdTree == i,
-        ifelse(
-          is.na(ScientificName), # if NA in Scientific name
-          names2[!is.na(names2)], # we use the name of the other obs
-          ScientificName
-        ), # otherwise, use the name of the current obs
-        ScientificName_cor
-      )) # do nothing if not the tree of interest
-    # fill in the code_cor
-    data_cor <- data_cor %>%
-      mutate(SpName_codecor = ifelse(IdTree == i,
-        ifelse(
-          is.na(ScientificName), # if NA in Scientific name
-          "gapfilled",
-          "no_cor"
-        ),
-        SpName_codecor
-      )) # do nothing if not the tree of interest
-  } else { # if none of the two names are NA
-    data_cor <- data_cor %>%
-      mutate(ScientificName_cor = ifelse(IdTree == i,
-        NA, # put NA as we don't know which one is the good one
-        ScientificName_cor
-      ))
-    # fill in the code_cor
-    data_cor <- data_cor %>%
-      mutate(SpName_codecor = ifelse(IdTree == i,
-        "more than one scientific name",
-        SpName_codecor
-      ))
+  other_lf <- data_cor |>
+    subset(lifeform %in% c("palm", "tree fan", "death", "vine", "liana")) |>
+    group_by(lifeform) |>
+    summarise(n = n())
+  if (nrow(other_lf) > 0) {
+    text <- paste(
+      "We removed",
+      with(other_lf, paste(n, lifeform)) |> paste(collapse = ", "),
+      "measurements, i.e.",
+      round(sum(other_lf$n) / nrow(data_cor) * 100, 2),
+      "% of all measurements."
+    )
+    data_cor <- data_cor |>
+      subset(!lifeform %in% c("palm", "tree fan", "death", "vine", "liana"))
+  } else {
+    text <- paste(
+      "Based on the 'LifeForm' column, we did not find any life",
+      "forms other than trees. Please let us know if this is not the case."
+    )
   }
-}
-
-# when there are more than two scientific name for a given tree
-tree_many_sp <- nb_sp_tree %>% filter(nbsp > 2)
-# replace the name by NA (as we don't know which one is the good one
-data_cor <- data_cor %>%
-  mutate(ScientificName_cor = ifelse(IdTree %in% tree_many_sp,
-    NA,
-    ScientificName_cor
-  ))
-# fill in the code_cor
-data_cor <- data_cor %>%
-  mutate(SpName_codecor = ifelse(IdTree %in% tree_many_sp,
-    "more than one scientific name",
-    SpName_codecor
-  ))
-```
-
-```{r text-sp-dupl}
-if (all(data_cor$SpName_codecor == "no_cor")) { # no duplicated names
+} else {
   text <- paste(
-    "There was always only one scientific name for a given individual (or",
-    "always a NA). No change has been made. The value is ScientificName_cor",
-    "is the same than in ScientificName, and SpName_codecor is always 'no_cor'"
+    "In this dataset, there was no column 'LifeForm' with information about",
+    "life forms (such as trees, lianas, palms), so we assume that all",
+    "individuals in your dataset are trees. Please let us know if that is not",
+    "the case."
   )
-} else { # if some correction have been made
-  nb_filled <- data_cor %>%
-    filter(SpName_codecor == "gapfilled") %>%
-    count()
-  nb_prob <- data_cor %>%
-    filter(SpName_codecor == "more than one scientific name") %>%
-    count()
-  if (nb_filled != 0) {
-    text1 <- paste(
-      "There were",
-      nb_filled,
-      "observations with NA in the ScientificName,
-                   but for which other observations of the same trees
-                   have a unique ScientificName.
-                   These case were gapfilled by putting the scientific name
-                   of the other observations in ScientificName_cor. The
-                   value in SpName_codecor is 'gapfilled'."
-    )
-  } else {
-    text1 <- ""
-  }
-  if (nb_prob != 0) {
-    text2 <- paste(
-      "There were",
-      nb_prob,
-      "observations of individuals with at least 2 different (non NA)
-                   scientific names.
-                   As we cannot know which is correct,
-                   all observations of the given individuals are set to NA.
-                   The value in SpName_codecor
-      is 'more than one scientific name.`"
-    )
-  } else {
-    text2 <- ""
-  }
-  text <- paste(text1, "\n", text2)
 }
 ```
 
 `r text`
 
-### Only one set of coordinates per tree and no missing coordinates
+### Ensure one scientific name per tree
 
-<!-- Which coordinates do we take ? check if there are dataset with no absolute coordinate-->
+We want to now ensure that individuals have the same scientific name across censuses.
 
-### All trees within the plot
+```{r one-sp-per-tree}
+#| message: false
+#| warning: false
+text <- ""
+duplicated_species <- data_cor %>%
+  group_by(IdTree) %>%
+  summarise(
+    nbsp = n_distinct(scientific_cleaned, na.rm = TRUE),
+    nbsp_na = n_distinct(scientific_cleaned, na.rm = FALSE)
+  )
 
-# First step of data visualization
+data_cor <- data_cor %>%
+  group_by(IdTree) %>%
+  arrange(Year) %>%
+  mutate(scientific_cleaned = last(scientific_cleaned, na_rm = TRUE)) %>%
+  ungroup()
 
--   stem abundance by plot and census year
+if (all(duplicated_species$nbsp_na < 2)) { # no duplicated names
+  text <- paste(
+    "There was always only one scientific name for a given individual (or",
+    "always a NA). No change has been made."
+  )
+} else {
+  # if some correction have been made
+  text <- paste(
+    "There were",
+    with(duplicated_species, sum(nbsp_na == 2 & nbsp == 1)),
+    "observations with NA in the scientific names, but with a unique",
+    "(non-NA) scientific name.",
+    "There were",
+    sum(duplicated_species$nbsp > 1),
+    "observations with more than one non-NA scientific name.",
+    "In all these cases, we used the last non-NA scientific name recorded",
+    "for each tree."
+  )
+}
+```
 
--   mean (or median) dbh by plot and census year
-
--   number of species
-
--   maps per plot and per census
+`r text`
 
 # DBH corrections
 
-![Flowchart of DBH corrections](flowchart_dbh_correction.png)
+The following flowchart summarises the corrections applied to DBH and DBH changes. The steps (yellow rectangles) are explained and illustrated in each subsection.
 
-We keep the original `Diameter` column and add a `diameter_cor` column where we implement diameter corrections.
+![Flowchart of DBH corrections](flowchart.png)
 
 ```{r create-diameter_cor}
+#| message: false
+#| warning: false
 data_cor$diameter_cor <- data_cor$Diameter
+```
+
+## Detect misplaced decimals 
+
+Some trees have abnormally larger diameters because the decimal was misplaced. We check all diameter measurements $\geq$ 100 cm: if the value divided by 10 is within 10% of the range of other diameter values of the same stem, we keep the new measurement (divided by 10). 
+
+```{r correct-decimals}
+detect_decimal <- function(x, lim = 100) {
+  if (length(x) > 1 & sum(x > lim) == 1) { # nolint
+    if (any((x[x > lim] / 10 > 0.9 * min(x[x <= lim])) &
+      (x[x > lim] / 10 < 1.1 * max(x[x <= lim])))) { # nolint
+      return(x > lim)
+    } else {
+      return(rep(FALSE, length(x)))
+    }
+  } else {
+    return(rep(FALSE, length(x)))
+  }
+}
+data_cor <- data_cor |>
+  group_by(IdStem) |>
+  mutate(
+    diameter_cor =
+      diameter_cor / ifelse(detect_decimal(diameter_cor), 10, 1)
+  ) |>
+  ungroup()
+
+if (sum(data_cor$Diameter != data_cor$diameter_cor) > 0) {
+  text <- paste(
+    "We have changed",
+    sum(data_cor$Diameter != data_cor$diameter_cor),
+    "measurements."
+  )
+} else {
+  text <- ""
+}
+```
+
+```{r}
+if (with(data_cor, sum(Diameter != diameter_cor) > 0)) {
+  id_cor <- subset(data_cor, Diameter != diameter_cor)$IdStem |> unique()
+  if (length(id_cor) > 12) id_cor <- sample(id_cor, 12)
+  data_cor |>
+    filter(IdStem %in% id_cor) |>
+    ggplot(aes(Year)) +
+    labs(y = "Diameter (cm)", col = "Was the DBH\ndivided by 10?") +
+    geom_point(aes(y = diameter_cor), col = "forestgreen") +
+    geom_point(aes(y = Diameter, col = diameter_cor != Diameter)) +
+    scale_color_manual(values = c("black", "red")) +
+    facet_wrap(~IdStem, scales = "free") +
+    theme_minimal()
+}
 ```
 
 ## Taper correction
 
-The taper correction estimates DBH for diameter values measured above breast height. We used the function from function from Cushman et al. (2014): $$ DBH = D \cdot e^{b(HOM - 1.3)}$$ where $DBH$ is the estimated diameter at breast height, $D$ is the measured diameter (cm) at height of measurement $HOM$ (m) and $b$ is defined as follows:
-
-$$b = e^{-2.0205 - 0.5053 ln(diam) + 0.3748 ln(HOM)}$$ Note: We did not use the equation from Cushman et al. (2020) because, although it includes additional data from a larger number of sites, the equation can give negative values of $b$, resulting in values of $DBH$ less than $D$. One solution in the future is to recalibrate the function using the original data from Cushman et al. (2020).
+Trees measured above the standard height of 1.3 m (e.g. if they have irregular trunks at 1.3 m due to buttresses) will have a smaller diameter measured than their actual DBH due to trunk taper. To correct for this systematic bias, taper corrections have been developed to estimate DBH based on the measured diameter and the height at which it was measured.
 
 ```{r taper-correction}
-taper <- function(diam, hom) {
+#| message: false
+#| warning: false
+taper_function <- function(diam, hom) {
   # default hom (no correction) when there is no reliable information
   hom[is.na(hom) | hom <= 0 | hom > 20] <- 1.3
   b <- exp(-2.0205 - 0.5053 * log(diam) + 0.3748 * log(hom))
   return(diam * exp(b * (hom - 1.3)))
 }
 
-if (any(colnames(data_cor) == "HOM")) {
-  if (any(data_cor$HOM != 1.3)) {
-    text <- paste(
-      "The height of measurement information is available so we could apply",
-      "the taper correction from Cushman et al., 2014."
-    )
-    # harmonize HOM values
-    data_cor <- data_cor |>
-      mutate(HOM = as.numeric(HOM)) |>
-      # some values in cm: convert to m
-      mutate(HOM = ifelse(HOM >= 50, HOM / 100, HOM)) |>
-      # apply correction
-      mutate(diameter_cor = taper(diameter_cor, HOM))
+if (params$taper) {
+  if (any(colnames(data_cor) == "HOM")) {
+    if (any(data_cor$HOM != 1.3)) {
+      text <- paste(
+        "The taper correction estimates DBH for diameter values measured above",
+        "breast height. We used the function from function from Cushman et al.",
+        "(2014): DBH = D.exp(b(HOM - 1.3)) where DBH is the estimated diameter",
+        "at breast height, D is the measured diameter (cm) at height of",
+        "measurement HOM (m) and b is defined as follows:\n",
+        "b = exp(-2.0205 - 0.5053 ln(diam) + 0.3748 ln(HOM))."
+      )
+      # harmonize HOM values
+      data_cor <- data_cor |>
+        mutate(HOM = as.numeric(HOM)) |>
+        # some values in cm: convert to m
+        mutate(HOM = ifelse(HOM >= 50, HOM / 100, HOM)) |>
+        # apply correction
+        mutate(diameter_cor = taper_function(diameter_cor, HOM))
 
-    subset(data_cor, HOM != 1.3) |>
-      ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
-      geom_abline(intercept = 0, slope = 1, lty = 2) +
-      geom_point() +
-      labs(x = "Original diameter (cm)", y = "Taper-corrected diameter (cm)") +
-      scale_color_viridis_c() +
-      theme_classic()
+      subset(data_cor, HOM != 1.3) |>
+        ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
+        geom_abline(intercept = 0, slope = 1, lty = 2) +
+        geom_point() +
+        labs(
+          x = "Original diameter (cm)",
+          y = "Taper-corrected diameter (cm)"
+        ) +
+        scale_color_viridis_c() +
+        theme_classic()
+    } else {
+      text <- paste(
+        "All measurements were recorded as having been taken at HOM = 1.3 m,",
+        "so we did not need to apply a taper correction."
+      )
+    }
   } else {
     text <- paste(
-      "All measurements were recorded as having been taken at HOM = 1.3 m, so",
-      "we did not need to apply a taper correction."
+      "There is no information on height of measurement,",
+      "so we could not apply any taper correction."
     )
   }
 } else {
   text <- paste(
-    "There is no information on height of measurement,",
-    "so we could not apply any taper correction."
+    "After testing various taper correction equations (Cushman et al. 2014,
+    2021), we found that these equations over-corrected the data at most sites
+    and introduced a new bias. Until we find a taper correction that's better
+    suited to Bioforest sites, we decided not to correct for taper."
   )
 }
 ```
 
+<<<<<<< HEAD
 ```{r taper-correction-bis}
 # This is to test the correction made when using the new equation for taper correction (test GD)
 # here I take the results of Model 1
@@ -1003,17 +1341,19 @@ if (any(colnames(data_cor) == "HOM")) {
 
 ```
 
+=======
+>>>>>>> e83195ff350b5816b5e1470971a99046941e6852
 `r text`
 
-<!-- There are HOM below 1.3m.... We need to decide what to do with them -->
-
-## Interpolating missing measurements
+## Interpolation of missing measurements
 
 If trees are missed in a census and remeasured in a later census, we use the DBH values from the previous and next census to interpolate the missing DBH value(s).
 
-This may lead to bias in the first and last censuses, where missed DBHs cannot be detected. We need to check that recruitment and mortality rates are not systematically lower in these two censuses.
+This can lead to bias in the first and last censuses where missing DBH cannot be detected. We need to check that recruitment and mortality rates are not systematically lower in these two censuses.
 
 ```{r interpolate-missing-dbh}
+#| message: false
+#| warning: false
 interpolate <- function(diam, years) {
   if (sum(!is.na(diam)) > 1) {
     return(approx(years, diam, years)$y)
@@ -1039,10 +1379,10 @@ tree_info <- data_cor |>
 missing_censuses <- data_cor |>
   # list all census years by plot and subplot
   group_by(Site, Plot, Subplot) |>
-  reframe(Year = unique(Year)) |>
+  reframe(year_census = unique(year_census)) |>
   ungroup() |>
   # add all combinations of IdStem x IdCensus (by Plot and Subplot)
-  merge(
+  right_join(
     unique(data_cor[, c("Site", "Plot", "Subplot", "IdStem")]),
     by = c("Site", "Plot", "Subplot")
   ) |>
@@ -1050,18 +1390,20 @@ missing_censuses <- data_cor |>
   merge(tree_info) |>
   # add DBH information
   merge(
-    data_cor[, c("IdStem", "Year", "diameter_cor")],
-    by = c("IdStem", "Year"),
+    data_cor[, c("IdStem", "year_census", "diameter_cor")],
+    by = c("IdStem", "year_census"),
     all = TRUE
   ) |>
   # interpolate missing diameters
   group_by(IdStem) |>
   mutate(
-    diameter_cor = interpolate(diameter_cor, Year)
+    diameter_cor = interpolate(diameter_cor, year_census)
   ) |>
   subset(!is.na(diameter_cor)) |>
   # keep only measurements missing from original data:
-  subset(!paste(IdStem, Year) %in% with(data_cor, paste(IdStem, Year)))
+  subset(!paste(IdStem, year_census) %in%
+    with(data_cor, paste(IdStem, year_census))) |> # nolint
+  mutate(Year = year_census)
 
 # add interpolated DBHs to raw data
 data_cor <- bind_rows(
@@ -1071,22 +1413,14 @@ data_cor <- bind_rows(
 rm(missing_censuses)
 
 if (sum(is.na(data_cor$Diameter)) > 0) {
+  n_missing <- sum(is.na(data_cor$Diameter))
+  stem_missing <- length(unique(data_cor$IdStem[is.na(data_cor$Diameter)]))
   text <- paste(
-    sum(is.na(data_cor$Diameter)),
-    "missing DBH values were interpolated."
+    "We found a total of", sum(is.na(data_cor$Diameter)),
+    "missing DBH values, in", stem_missing, "stems.",
+    "The figure below shows a subset of", min(stem_missing, 12),
+    "trees with missing DBH (red points are interpolated DBH)."
   )
-  illustration <- sample(
-    subset(data_cor, is.na(Diameter))$IdStem,
-    min(sum(is.na(data_cor$Diameter)), 12)
-  )
-  subset(data_cor, IdStem %in% illustration) |>
-    ggplot(aes(x = Year, y = diameter_cor)) +
-    geom_point(aes(col = is.na(Diameter))) +
-    labs(x = "Census year", y = "Diameter (cm)", col = "Interpolated") +
-    scale_color_manual(values = c("black", "red")) +
-    facet_wrap(~IdStem, scales = "free") +
-    theme_classic() +
-    theme(legend.position = "bottom")
 } else {
   text <- "No missing DBH values were interpolated."
 }
@@ -1094,156 +1428,336 @@ if (sum(is.na(data_cor$Diameter)) > 0) {
 
 `r text`
 
-## Correct DBH changes
+```{r fig-interpolate, fig.height=7, fig.width=11}
+#| message: false
+#| warning: false
+if (sum(is.na(data_cor$Diameter)) > 0 && isTRUE(params$print)) {
+  illustration <- sample(
+    subset(data_cor, is.na(Diameter))$IdStem,
+    min(stem_missing, 12)
+  )
+  subset(data_cor, IdStem %in% illustration) |>
+    separate(IdTree, c(NA, NA, NA, "IdTree"), sep = "_") |>
+    mutate(label = paste0(
+      "Plot: ", Plot, "_", Subplot,
+      ", treeID: ", IdTree, "\n Species: ", scientific_cleaned
+    )) |>
+    ggplot(aes(x = Year, y = diameter_cor)) +
+    geom_point(aes(col = is.na(Diameter))) +
+    labs(x = "Census year", y = "Diameter (cm)", col = "Interpolated") +
+    scale_color_manual(values = c("black", "red")) +
+    facet_wrap(~label, scales = "free") +
+    theme_classic() +
+    theme(legend.position = "bottom")
+}
+```
 
-### Estimate DBH growth
+## Substitute excessive DBH changes
+
+Growth and productivity measurements are very sensitive to large changes in DBH, for example when the measurement height is changed. To mitigate this problem, we replace excessive DBH changes with the average growth value of similar trees (without changing the DBH values).
+
+This poses two challenges: 1. what can be considered an 'excessive' DBH change and 2. how to define 'similar' trees.
 
 ```{r estimate-dbh-growth}
+#| message: false
+#| warning: false
+data_years <- data_cor |>
+  select(Site, Plot, Subplot, Year) |>
+  unique() |>
+  group_by(Site, Plot, Subplot) |>
+  arrange(Year, .by_group = TRUE) |>
+  mutate(prev_year = c(NA, Year[-length(Year)]))
 data_cor <- data_cor |>
+  merge(data_years, by = c("Site", "Plot", "Subplot", "Year"), all.x = TRUE) |>
   group_by(IdStem) |>
+  arrange(Year, .by_group = TRUE) |>
   mutate(
-    diam_growth = c(NA, diff(diameter_cor)) / c(NA, diff(Year)),
-    diff_year = c(NA, diff(Year))
-  )
-# TODO add dbh recruitment: standardize over previous census interval
+    diam_growth = c(NA, diff(diameter_cor)) / (Year - prev_year),
+    diff_year = (Year - prev_year)
+  ) |>
+  ungroup()
 ```
 
-### Define DBH change threshold
+Here we defined 'similar' trees by first grouping them by genus and size (DBH), assuming that these two factors are among the main drivers of tree growth. We ranked genera by median DBH growth and divided them into four groups of increasing median DBH growth, with similar numbers of individual measurements per group.
 
-> proposal: use general threshold for lower bound, and moving 99th (or 95th) percentile for upper bound
+```{r gen-groups}
+#| message: false
+#| warning: false
+genus_groups <- data_cor %>%
+  filter(!is.na(genus_cleaned)) %>%
+  # get median growth (excluding negative values) per genus
+  group_by(genus_cleaned) %>%
+  mutate(med_growth = median(diam_growth[diam_growth >= 0], na.rm = TRUE)) %>%
+  ungroup() %>%
+  # create quantile bins with equal number of individuals
+  mutate(gen_group = ntile(med_growth, 4)) %>%
+  group_by(genus_cleaned, med_growth) %>%
+  # summarize back to species level
+  summarise(gen_group = first(gen_group), .groups = "drop")
+```
 
-DBH thresholds are defined by size class: trees DBH are split into 20 quantiles. The 99th DBH growth value per quantile is defined as the upper limit above with DBH growth values are considered outliers. The lower DBH growht limit is defined as the 1st percentile of DBH growth for all trees.
+```{r gen-group-visualisation}
+#| message: false
+#| warning: false
+if (any(!is.na(genus_groups$med_growth))) {
+  genus_groups |>
+    subset(!is.na(gen_group) & !is.na(genus_cleaned)) |>
+    group_by(gen_group) |>
+    summarise(
+      range = paste(
+        paste(round(range(med_growth), 2), collapse = " - "),
+        "cm/yr"
+      ),
+      genus = paste(genus_cleaned, collapse = ", ")
+    ) |>
+    select(range, genus) |>
+    t() |>
+    knitr::kable(
+      col.names = paste(
+        "Group", seq_len(length(unique(drop_na(genus_groups)$gen_group)))
+      ),
+      row.names = FALSE
+    )
+}
+```
 
-```{r dbh-change-thresholds}
+We then split each genus group into 5 quantiles of DBH: this results in 20 groups of DBH growth measures based on both genus-level growth rates and size (DBH).
+
+Outliers are defined here as the 0.5% lowest DBH growth values (all groups combined) and the 0.5% highest DBH growth values per group. These outliers in DBH growth were replaced by the mean growth of their group.
+
+```{r substitute-dbh-change}
+#| message: false
+#| warning: false
 data_cor <- data_cor |>
+  left_join(genus_groups, by = "genus_cleaned") |>
+  group_by(gen_group) |>
+  mutate(diam_group = paste(gen_group, ntile(diameter_cor, 5), sep = "_")) |>
+  # lower diameter growth threshold is the same for all species and sizes
   ungroup() |>
-  mutate(diam_quant = ntile(diameter_cor, 20)) |>
-  mutate(dgrowth_lower = quantile(diam_growth, 0.01, na.rm = TRUE)) |>
-  group_by(diam_quant) |>
-  mutate(dgrowth_upper = quantile(diam_growth, 0.99, na.rm = TRUE)) |>
-  mutate(outlier = diam_growth < dgrowth_lower | diam_growth > dgrowth_upper) |>
+  mutate(
+    dgrowth_lower = quantile(diam_growth, 0.005, na.rm = TRUE),
+    # define general upper quantile for unidentified individuals
+    dgrowth_upper = quantile(diam_growth, 0.995, na.rm = TRUE)
+  ) |>
+  # upper diameter growth threshold defined by species and size
+  group_by(diam_group) |>
+  mutate(dgrowth_upper = ifelse(!is.na(gen_group),
+    quantile(diam_growth, 0.995, na.rm = TRUE),
+    dgrowth_upper
+  )) |>
+  # define outlier values
+  mutate(outlier = !is.na(diam_growth) &
+    (diam_growth < dgrowth_lower | diam_growth > dgrowth_upper)) |> # nolint
+  # estimate average growth by group
   mutate(average_growth = mean(diam_growth[!outlier], na.rm = TRUE)) |>
   ungroup() |>
+  # substitute diameter growth
   mutate(diam_growth_cor = ifelse(outlier, average_growth, diam_growth))
-
-data_thresh <- data_cor |>
-  group_by(diam_quant) |>
-  summarise(
-    diam_min = min(diameter_cor),
-    diam_max = max(diameter_cor),
-    dgrowth_upper = unique(dgrowth_upper),
-    dgrowth_lower = unique(dgrowth_lower),
-    average_growth = unique(average_growth)
-  ) |>
-  pivot_longer(cols = c("diam_max", "diam_min"))
-data_cor |>
-  subset(outlier) |>
-  ggplot(aes(x = diameter_cor, y = diam_growth)) +
-  geom_point() +
-  geom_line(data = data_thresh, aes(x = value, y = dgrowth_upper), col = 2) +
-  geom_line(data = data_thresh, aes(x = value, y = dgrowth_lower), col = 2) +
-  geom_line(data = data_thresh, aes(x = value, y = average_growth), col = 4) +
-  labs(x = "Diameter (cm)", y = "Diameter growth (cm/yr)") +
-  scale_x_log10() +
-  theme_classic()
 ```
 
-This graph shows all outlier DBH growth values (in cm/yr), as well as the lower and upper bounds of "acceptable" DBH growth (in red) and the average DBH growth with which outlier values are replaced (blue), as a function of tree DBH.
-
-### Shift DBH series
-
-When there is a reported change in height of measurement but the new height of measurement is unknown.
-
-```{r shift-dbh}
-data_cor <- data_cor |>
-  group_by(IdStem) |>
-  mutate(
-    hom_increase = c(NA, diff(HOM) > 0)
+```{r}
+#| message: false
+#| warning: false
+if (sum(data_cor$outlier) > 0) {
+  text <- paste(
+    "This graph shows all outlier DBH growth values (in cm/yr),",
+    "as well as the lower and upper bounds of 'acceptable' DBH",
+    "growth (in red) and the average DBH growth with which outlier",
+    "values are replaced (blue), as a function of tree DBH and",
+    "genus groups."
   )
-# what column could have info on HOM change when no HOM value is available?
+} else {
+  text <- paste(
+    "There were no diameter growth values to correct, as no stem",
+    "was measured more than once."
+  )
+}
 ```
 
-### Substitute excessive DBH changes
+`r text`
 
-Outliers in DBH growth (but not DBHs) are replaced by the mean DBH growth of the corresponding size class (after excluding outlier values).
+```{r dbh-change-fig}
+#| warning: false
+#| message: false
+#| fig.height: 7
+#| fig.width: 11
 
-> Replacement by average DBH growth values is not optimal; it may introduce bias depending on the variable being estimated. For example, for AGB productivity it would be better to use average AGB.
-
-`r with(data_cor, sum(diam_growth_cor != diam_growth & !is.na(diam_growth_cor)))` outlier DBH growth values were substituted. The following graph shows a subset of trees where the most DBH growth values were substituted.
-
-```{r substitute-excessive-dbh-change}
-id_cor <- subset(data_cor, outlier)$IdStem
-tree_subs <-
+if (sum(data_cor$outlier) > 0 && isTRUE(params$print)) {
+  data_thresh <- data_cor |>
+    subset(!is.na(gen_group)) |>
+    group_by(gen_group, diam_group) |>
+    summarise(
+      diam_min = min(diameter_cor),
+      diam_max = max(diameter_cor),
+      dgrowth_upper = unique(dgrowth_upper),
+      dgrowth_lower = unique(dgrowth_lower),
+      average_growth = unique(average_growth)
+    ) |>
+    pivot_longer(cols = c("diam_max", "diam_min"))
   data_cor |>
-  subset(IdStem %in% id_cor) |>
-  group_by(IdStem) |>
-  summarise(
-    nsubs = sum(diam_growth_cor != diam_growth & !is.na(diam_growth_cor))
-  ) |>
-  arrange(desc(nsubs))
+    subset(outlier) |>
+    ggplot(aes(x = diameter_cor, y = diam_growth)) +
+    geom_point() +
+    geom_line(data = data_thresh, aes(x = value, y = dgrowth_upper), col = 2) +
+    geom_line(data = data_thresh, aes(x = value, y = dgrowth_lower), col = 2) +
+    geom_line(data = data_thresh, aes(x = value, y = average_growth), col = 4) +
+    labs(x = "Diameter (cm)", y = "Diameter growth (cm/yr)") +
+    ylim(-5, 10) +
+    facet_wrap(~ paste("Genus group", gen_group)) +
+    scale_x_log10() +
+    theme_classic()
+}
+```
 
-if (length(id_cor) > 0) {
+```{r}
+#| message: false
+#| warning: false
+if (sum(data_cor$outlier) > 0) {
+  text <- paste(
+    "The graph below shows a subset of trees with outlier DBH",
+    "growth values; the top panels show the DBH growth values and",
+    "the bottom panels show the corresponding DBH values (one",
+    "column per tree). The red dots are the outlier DBH growth",
+    "values, which were then replaced by the average growth values",
+    "for their group (species x DBH). DBH values were not replaced."
+  )
+} else {
+  text <- ""
+}
+```
+
+`r text`
+
+```{r show-examples-substitution}
+#| warning: false
+#| fig.height: 6
+#| fig.width: 12
+
+if (sum(data_cor$outlier) > 0 && isTRUE(params$print)) {
+  id_cor <-
+    data_cor |>
+    subset(outlier) |>
+    group_by(gen_group) |>
+    summarise(id = sample(unique(IdStem), min(2, length(unique(IdStem)))))
+
+  labs_diam <- c(
+    diam_growth = "Diameter growth rate (cm/yr)",
+    diameter_cor = "Diameter (cm)"
+  )
   data_cor |>
-    subset(IdStem %in% tree_subs$IdStem[1:6]) |>
+    subset(IdStem %in% id_cor$id) |>
+    separate(IdTree, c(NA, NA, NA, "IdTree"), sep = "_") |>
+    mutate(label = paste0(
+      "Plot: ", Plot, "_", Subplot,
+      "\ntreeID: ", IdTree, "\n", scientific_cleaned
+    )) |>
     pivot_longer(cols = c("diam_growth", "diameter_cor")) |>
     ggplot(aes(x = Year)) +
     geom_point(aes(y = value, col = outlier)) +
-    labs(col = "Outlier DBH growth?") +
+    labs(col = "Outlier DBH growth?", y = NULL) +
     scale_color_manual(values = c("black", "red")) +
-    facet_grid(name ~ IdStem, scales = "free") +
-    theme_bw()
+    facet_grid(name ~ label,
+      scales = "free", switch = "y",
+      labeller = labeller(name = labs_diam)
+    ) +
+    theme_bw() +
+    theme(
+      legend.position = "bottom", strip.placement = "outside",
+      strip.background.y = element_blank()
+    )
 }
 ```
 
 # Data aggregation
 
+The last step of this document is to calculate and visualize all the variables of interest. We divided the variables into 3 sections: 1. Neutral diversity 2. Functional diversity and composition 3. Structural diversity
+
 ```{r create-data_aggr}
+#| message: false
+#| warning: false
 data_aggr <- c()
 ```
 
-## Add census year information for flux calculation
-
 ```{r diff-year}
 #| message: false
+#| warning: false
 # for each census year, add information on previous and next census years
 data_year <- data_cor |>
   ungroup() |>
-  select(Site, Plot, Year) |>
+  select(Site, Plot, year_census) |>
   unique() |>
-  arrange(Site, Plot, Year) |>
+  drop_na() |>
+  arrange(Site, Plot, year_census) |>
   group_by(Site, Plot) |>
   mutate(
-    prev_census = c(NA, Year[-length(Year)]),
-    next_census = c(Year[-1], NA)
+    prev_census = c(NA, year_census[-length(year_census)]),
+    next_census = c(year_census[-1], NA)
   ) |>
   ungroup()
 
 # add information on each tree's recruitment and mortality years
 data_cor <- data_cor |>
-  merge(data_year) |>
-  mutate(recr_year = min(Year), mort_year = max(Year), .by = IdStem)
+  left_join(data_year) |>
+  mutate(
+    recr_year = min(year_census),
+    mort_year = max(year_census), .by = IdStem
+  )
 ```
 
-## Neutral diversity
+## Taxonomic Diversity
+
+To evaluate taxonomic diversity, we used functions from the entropart package in R (Marcon et al., 2020). We estimated all these indices at both species and genus level.
+
+We quantified taxonomic diversity using Hill numbers, a family of diversity measures that account for both species richness and evenness.
+
+### Species Richness
+
+Diversity of Order q = 0: Species richness, which counts all species equally, regardless of their abundance.
+
+### Shannon Diversity
+
+Diversity of Order q = 1: Shannon diversity, calculated as the exponential of Shannon entropy, which gives proportional weight to species based on their relative abundances. This index balances sensitivity to both common and rare species.
+
+### Simpson Diversity
+
+Diversity of Order q = 2: Simpson diversity, calculated as the inverse of the Simpson index, which emphasizes dominant species and is less sensitive to rare taxa.
+
+### Evenness
+
+Evenness reflects how uniformly individuals are distributed among the observed species. It was derived by dividing the observed diversity (for a given value of q) by the theoretical maximum diversity for the same number of species. Values closer to 1 indicate communities where individuals are more evenly distributed across species, while lower values indicate dominance by a few species.
+
+### Coverage
+
+Sample coverage estimates the proportion of individuals in a community that belong to species already detected in the sample. It provides an indication of sampling completeness, with values approaching 1 suggesting that most of the community has been captured and that further sampling is unlikely to yield many additional species.
+
+The following figures represent all the above mentioned indices at the species and genus level. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
 
 ```{r neutral-diversity}
+#| message: false
+#| warning: false
 # Calculate neutral diversity indices per plot and year
 
 # species
 neutral_div_sp <- data_cor %>%
-  subset(!is.na(species_corrected)) %>%
-  group_by(Site, Plot, Year,
-    scientific = paste(genus_corrected, species_corrected)
-  ) %>%
+  subset(!is.na(species_cleaned)) %>%
+  group_by(Site, Plot, Year = year_census, scientific_cleaned) %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(Site, Plot, Year) %>%
   summarise(
-    richness_sp = Richness(count),
-    diversity_q0_sp = Diversity(count, q = 0, SampleCoverage = 0.8),
-    diversity_q1_sp = Diversity(count, q = 1, SampleCoverage = 0.8),
-    diversity_q2_sp = Diversity(count, q = 2, SampleCoverage = 0.8),
-    evenness_sp = Shannon(count, SampleCoverage = 0.8) /
-      log(n_distinct(scientific)),
+    diversity_q0_sp = Diversity(count,
+      q = 0, SampleCoverage = 0.8,
+      Correction = "None"
+    ),
+    diversity_q1_sp = Diversity(count,
+      q = 1, SampleCoverage = 0.8,
+      Correction = "None"
+    ),
+    diversity_q2_sp = Diversity(count,
+      q = 2, SampleCoverage = 0.8,
+      Correction = "None"
+    ),
+    evenness_sp = Shannon(count, SampleCoverage = 0.8, Correction = "None") /
+      log(n_distinct(scientific_cleaned)),
     coverage_sp = Coverage(count)
   ) %>%
   pivot_longer(
@@ -1254,16 +1768,24 @@ neutral_div_sp <- data_cor %>%
 
 # genera
 neutral_div_gen <- data_cor %>%
-  subset(!is.na(genus_corrected)) %>%
-  group_by(Site, Plot, Year, genus = genus_corrected) %>%
+  subset(!is.na(genus_cleaned)) %>%
+  group_by(Site, Plot, Year = year_census, genus = genus_cleaned) %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(Site, Plot, Year) %>%
   summarise(
-    richness_gen = Richness(count),
-    diversity_q0_gen = Diversity(count, q = 0, SampleCoverage = 0.9),
-    diversity_q1_gen = Diversity(count, q = 1, SampleCoverage = 0.9),
-    diversity_q2_gen = Diversity(count, q = 2, SampleCoverage = 0.9),
-    evenness_gen = Shannon(count, SampleCoverage = 0.9) /
+    diversity_q0_gen = Diversity(count,
+      q = 0, SampleCoverage = 0.9,
+      Correction = "None"
+    ),
+    diversity_q1_gen = Diversity(count,
+      q = 1, SampleCoverage = 0.9,
+      Correction = "None"
+    ),
+    diversity_q2_gen = Diversity(count,
+      q = 2, SampleCoverage = 0.9,
+      Correction = "None"
+    ),
+    evenness_gen = Shannon(count, SampleCoverage = 0.9, Correction = "None") /
       log(n_distinct(genus)),
     coverage_gen = Coverage(count)
   ) %>%
@@ -1277,135 +1799,346 @@ neutral_div_gen <- data_cor %>%
 data_aggr <- data_aggr %>%
   rbind(neutral_div_sp) %>%
   rbind(neutral_div_gen)
+```
+
+```{r function-fig}
+#| message: false
+#| warning: false
+aggr_fig <- function(data, vars_names, title_fig = NULL) {
+  g <- data %>%
+    subset(variable %in% names(var_names)) %>%
+    ggplot(aes(x = Year, y = value, color = paste(Site, Plot))) +
+    geom_line(show.legend = FALSE) +
+    geom_point(show.legend = (length(unique(data$Plot)) <= 28)) +
+    facet_wrap(~variable,
+      scales = "free_y",
+      labeller = labeller(variable = var_names)
+    ) +
+    labs(
+      title = title_fig,
+      x = NULL, y = NULL, color = NULL
+    ) +
+    theme_minimal() +
+    guides(col = guide_legend(ncol = 2))
+
+  if (length(var_names) == 5) {
+    g + theme(legend.position = c(0.82, 0.17))
+  } else {
+    g
+  }
+}
+```
+
+
+```{r neutral-diversity-fig}
+#| message: false
+#| warning: false
+#| fig.height: 6
+#| fig.width: 8
 
 # Plot temporal trajectories of different indices across plots
-data_aggr %>%
-  subset(variable %in% neutral_div_sp$variable) %>%
-  ggplot(aes(x = Year, y = value, color = as.factor(Plot))) +
-  geom_line() +
-  geom_point() +
-  facet_wrap(~variable, scales = "free_y") +
-  labs(
-    title = "Diversity Indices Across Plots and Years - Species level",
-    x = "Year", y = "Index Value", color = "Plot"
-  ) +
-  theme_minimal()
+if (isTRUE(params$print)) {
+  var_names <- c(
+    coverage = "Coverage",
+    diversity_q0 = "Richness",
+    diversity_q1 = "Shannon Diversity",
+    diversity_q2 = "Simpson Diversity",
+    evenness = "Evenness"
+  )
 
-data_aggr %>%
-  subset(variable %in% neutral_div_gen$variable) %>%
-  ggplot(aes(x = Year, y = value, color = as.factor(Plot))) +
-  geom_line() +
-  geom_point() +
-  facet_wrap(~variable, scales = "free_y") +
-  labs(
-    title = "Diversity Indices Across Plots and Years - Genus level",
-    x = "Year", y = "Index Value", color = "Plot"
-  ) +
-  theme_minimal()
+  data_aggr %>%
+    subset(variable %in% neutral_div_sp$variable) %>%
+    mutate(variable = factor(gsub("_sp", "", variable),
+      levels = c(
+        paste0("diversity_q", 0:2),
+        "evenness", "coverage"
+      )
+    )) %>%
+    aggr_fig(var_names,
+      title_fig = paste(
+        "Diversity Indices Across Plots and Years",
+        "(Species level)"
+      )
+    )
+
+  data_aggr %>%
+    subset(variable %in% neutral_div_gen$variable) %>%
+    mutate(variable = factor(gsub("_gen", "", variable),
+      levels = c(
+        paste0("diversity_q", 0:2),
+        "evenness", "coverage"
+      )
+    )) %>%
+    aggr_fig(var_names,
+      title_fig = paste(
+        "Diversity Indices Across Plots and Years",
+        "(Genus level)"
+      )
+    )
+}
 ```
+
+
 
 ## Functional diversity and composition
 
+To evaluate the functional structure of plant communities, we assessed both functional composition and functional diversity using a set of ecologically meaningful plant traits. 
+
 ### Functional composition
 
+We quantified the functional composition as the community-weighted mean (CWM) for each trait, representing the average trait value in a community, weighted by species' relative abundances.
+
+The traits computed in the analysis were:
+
+#### Leaf area
+Associated with light capture and leaf construction cost
+
+- Leaf nitrogen content per leaf dry mass
+Reflects photosynthetic capacity and nutrient-use strategy.
+
+#### Specific leaf area (SLA)
+Indicates growth rate and resource acquisition.
+
+#### Stem specific wood density
+Related to mechanical strength, water transport efficiency, and survival strategies.
+
+
+The following figures represent all the above mentioned indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
+
 ```{r functional-composition-ba}
+#| message: false
+#| warning: false
+
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year, scientific_cleaned) |>
+  group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
-  merge(
-    read.delim("data/derived_data/traits_v2.tsv"),
+  inner_join(read.delim("data/derived_data/traits_v5.tsv"),
     by = "scientific_cleaned"
   ) |>
+  filter(!is.na(genus_trait_value_imputed)) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_ba")) |>
-  reframe(value = weighted.mean(trait_value_imputed, ba)) |>
+  reframe(value = exp(weighted.mean(log(genus_trait_value_imputed), ba))) |>
   rbind(data_aggr)
 ```
 
 ```{r functional-composition-n}
+#| message: false
+#| warning: false
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year, scientific_cleaned) |>
+  group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
-  merge(
-    read.delim("data/derived_data/traits_v2.tsv"),
+  inner_join(read.delim("data/derived_data/traits_v5.tsv"),
     by = "scientific_cleaned"
   ) |>
+  filter(!is.na(genus_trait_value_imputed)) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_n")) |>
-  reframe(value = mean(trait_value_imputed, na.rm = TRUE)) |>
+  reframe(value = exp(mean(log(genus_trait_value_imputed)))) |>
   rbind(data_aggr)
 ```
 
-```{r fig-functional-composition, fig.height=8, fig.width=12}
+```{r fig-functional-composition}
+#| message: false
+#| warning: false
+#| fig.height: 6
+#| fig.width: 8
+
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "LA_cwm_n" = "Leaf area (mm2)",
+    "N_cwm_n" = "Leaf nitrogen content \n per leaf dry mass \n (mg g-1)",
+    "SLA_cwm_n" = "Specific leaf area \n (mm2 mg-1)",
+    "WD_cwm_n" = "Stem specific wood \n density (g cm-3)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Functional composition across Plots and Years"
+  )
+}
+```
+### Functional composition of fluxes
+
+We estimated the functional composition of fluxes as the functional trait value of each stem weighted by its contribution to a given flux (recruitment, growth or mortality). We quantified the fluxes in basal area, but it could be done in other ways (e.g. in AGB, stem abundance, etc). 
+
+```{r functional-composition-ba-recr}
+#| message: false
 #| warning: false
 
-var_names <- c(
-  "LA_cwm_ba" = "Leaf area (mm2)",
-  "N_cwm_ba" = "Leaf nitrogen content per leaf dry mass (mg g-1)",
-  "SLA_cwm_ba" = "Specific leaf area (mm2 mg-1)",
-  "WD_cwm_ba" = "Stem specific wood density (g cm-3)",
-  "hmax_cwm_ba" = "Asymptotic height (m)"
-)
+ba_func <- function(x) pi * (x / 200)**2
+data_aggr <- data_cor |>
+  filter(!is.na(prev_year) & Year == recr_year) |>
+  inner_join(
+    read.delim("data/derived_data/traits_v5.tsv"),
+    by = "scientific_cleaned"
+  ) |>
+  filter(!is.na(genus_trait_value_imputed)) |>
+  group_by(Site, Plot,
+    Year = year_census,
+    variable = paste0(trait, "_cwm_rba")
+  ) |>
+  reframe(value = exp(weighted.mean(
+    log(genus_trait_value_imputed),
+    ba_func(diameter_cor) / (Year - prev_year)
+  ))) |>
+  rbind(data_aggr)
+```
 
-data_aggr |>
-  subset(grepl("_cwm_ba$", variable)) |>
-  ggplot(aes(
-    x = Year, y = value, color = factor(Plot),
-    group = paste(Site, Plot)
-  )) +
-  geom_point() +
-  geom_line() +
-  labs(col = "Plot") +
-  theme_minimal() +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+```{r fig-cwm-ba-recr}
+#| message: false
+#| warning: false
+#| fig.height: 6
+#| fig.width: 8
+
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "LA_cwm_rba" = "Leaf area (mm2)",
+    "N_cwm_rba" = "Leaf nitrogen content \n per leaf dry mass \n (mg g-1)",
+    "SLA_cwm_rba" = "Specific leaf area \n (mm2 mg-1)",
+    "WD_cwm_rba" = "Stem specific wood \n density (g cm-3)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Functional composition\nweighted by recruitment in BA"
+  )
+}
+```
+
+```{r functional-composition-ba-growth}
+#| message: false
+#| warning: false
+
+data_aggr <- data_cor |>
+  mutate(ba_growth = ba_func(diameter_cor - diam_growth + diam_growth_cor) -
+    ba_func(diameter_cor - diam_growth)) |> # nolint
+  filter(!is.na(ba_growth)) |>
+  inner_join(
+    read.delim("data/derived_data/traits_v5.tsv"),
+    by = "scientific_cleaned"
+  ) |>
+  filter(!is.na(genus_trait_value_imputed)) |>
+  group_by(Site, Plot,
+    Year = year_census,
+    variable = paste0(trait, "_cwm_gba")
+  ) |>
+  reframe(value = exp(weighted.mean(
+    log(genus_trait_value_imputed),
+    ba_growth
+  ))) |>
+  rbind(data_aggr)
+```
+
+```{r fig-cwm-ba-growth}
+#| message: false
+#| warning: false
+#| fig.height: 6
+#| fig.width: 8
+
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "LA_cwm_gba" = "Leaf area (mm2)",
+    "N_cwm_gba" = "Leaf nitrogen content \n per leaf dry mass \n (mg g-1)",
+    "SLA_cwm_gba" = "Specific leaf area \n (mm2 mg-1)",
+    "WD_cwm_gba" = "Stem specific wood \n density (g cm-3)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Functional composition\nweighted by growth in BA"
+  )
+}
+```
+
+```{r functional-composition-ba-mort}
+#| message: false
+#| warning: false
+
+data_aggr <- data_cor |>
+  filter(Year == mort_year) |>
+  mutate(ba_mort = ba_func(diameter_cor) / (next_census - Year)) |>
+  mutate(Year = next_census) |>
+  inner_join(
+    read.delim("data/derived_data/traits_v5.tsv"),
+    by = "scientific_cleaned"
+  ) |>
+  filter(!is.na(genus_trait_value_imputed)) |>
+  group_by(Site, Plot, Year, variable = paste0(trait, "_cwm_mba")) |>
+  reframe(value = exp(weighted.mean(
+    log(genus_trait_value_imputed),
+    ba_mort
+  ))) |>
+  rbind(data_aggr)
+```
+
+
+```{r fig-cwm-ba-mort}
+#| message: false
+#| warning: false
+#| fig.height: 6
+#| fig.width: 8
+
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "LA_cwm_mba" = "Leaf area (mm2)",
+    "N_cwm_mba" = "Leaf nitrogen content \n per leaf dry mass \n (mg g-1)",
+    "SLA_cwm_mba" = "Specific leaf area \n (mm2 mg-1)",
+    "WD_cwm_mba" = "Stem specific wood \n density (g cm-3)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Functional composition\nweighted by mortality in BA"
+  )
+}
 ```
 
 ### Functional variance
 
+Based on the functional trait values mentioned in the previous section, we calculated the variance of every functional trait. 
+
+The following figures represent all the above mentioned indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
+
+
 ```{r functional-var}
+#| message: false
+#| warning: false
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year, scientific_cleaned) |>
-  reframe(ba = (diameter_cor / 200)^2 * pi) |>
-  merge(
-    read.delim("data/derived_data/traits_v2.tsv"),
+  group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
+  inner_join(
+    read.delim("data/derived_data/traits_v5.tsv"),
     by = "scientific_cleaned"
   ) |>
+  filter(!is.na(genus_trait_value_imputed)) |>
   group_by(Site, Plot, Year, variable = paste0(trait, "_cwv_n")) |>
-  reframe(value = var(trait_value_imputed)) |>
+  reframe(value = var(log(genus_trait_value_imputed))) |>
   rbind(data_aggr)
 ```
 
-```{r fig-functional-var, fig.height=8, fig.width=12}
+```{r fig-functional-var}
+#| message: false
 #| warning: false
+#| fig.height: 6
+#| fig.width: 8
 
-var_names <- c(
-  "LA_cwv_n" = "Leaf area variance",
-  "N_cwv_n" = "Leaf nitrogen content per leaf dry mass variance",
-  "SLA_cwv_n" = "Specific leaf area variance",
-  "WD_cwv_n" = "Stem specific wood density variance",
-  "hmax_cwv_n" = "Asymptotic height variance"
-)
-
-data_aggr |>
-  subset(grepl("_cwv_n$", variable)) |>
-  ggplot(aes(
-    x = Year, y = value, color = factor(Plot),
-    group = paste(Site, Plot)
-  )) +
-  geom_point() +
-  geom_line() +
-  labs(col = "Plot") +
-  theme_minimal() +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "LA_cwv_n" = "Leaf area (mm2)",
+    "N_cwv_n" = "Leaf nitrogen content \n per leaf dry mass \n (mg g-1)",
+    "SLA_cwv_n" = "Specific leaf area \n (mm2 mg-1)",
+    "WD_cwv_n" = "Stem specific wood \n density (g cm-3)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Variance of log-transformed Functional Traits"
+  )
+}
 ```
 
 ### Functional diversity
 
 ```{r functional-div}
-matrix_trait <- read.delim("data/derived_data/traits_v2.tsv") |>
+#| message: false
+#| warning: false
+traits_used <- c("WD", "SLA", "LA", "N")
+matrix_trait <- read.delim("data/derived_data/traits_v5.tsv") |>
   subset(scientific_cleaned %in% data_cor$scientific_cleaned) |>
+  subset(trait %in% traits_used) |>
+  mutate(log_trait_value_imputed = log(genus_trait_value_imputed)) |>
   pivot_wider(
     id_cols = "scientific_cleaned",
     names_from = trait,
-    values_from = trait_value_imputed
+    values_from = log_trait_value_imputed
   ) |>
   column_to_rownames("scientific_cleaned") |>
   as.matrix()
@@ -1413,7 +2146,7 @@ matrix_trait <- read.delim("data/derived_data/traits_v2.tsv") |>
 matrix_abund <- data_cor %>%
   subset(!is.na(scientific_cleaned)) %>%
   group_by(
-    meas_id = paste(Site, Plot, Year, sep = "__"),
+    meas_id = paste(Site, Plot, year_census, sep = "__"),
     scientific_cleaned
   ) %>%
   summarise(count = n(), .groups = "drop") |>
@@ -1437,71 +2170,83 @@ data_aggr <-
   rbind(data_aggr)
 ```
 
-```{r fig-functional-div, fig.height=8, fig.width=12}
+To describe the variation and structure of traits within communities, we used the above functional traits `r traits_used` to calculate multiple complementary functional diversity indices. These indices capture different dimensions of diversity within trait space, based on species’ positions and abundances:
+
+#### Functional Richness (scaled)
+Measures the volume of trait space occupied by the community, standardized for comparability. It reflects the range of functional strategies present, regardless of species abundance.
+
+#### Functional Divergence
+Indicates how abundance is distributed toward the edges of trait space. Higher values suggest that dominant species are functionally distinct from the community centroid, promoting niche differentiation.
+
+#### Functional Evenness
+Quantifies the regularity of species spacing and abundance distribution within trait space. High evenness implies that trait values are uniformly distributed and that resource use is balanced.
+
+#### Functional Dispersion
+Represents the mean distance of individual species to the community’s trait centroid, weighted by abundance. It accounts for both the spread and distribution of traits and is sensitive to both richness and dominance.
+
+The following figures represent all the above mentioned indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
+
+
+```{r fig-functional-div}
+#| message: false
 #| warning: false
+#| fig.height: 6
+#| fig.width: 8
 
-var_names <- c(
-  "FRic" = "Functional Richness (scaled)",
-  "FDiv" = "Functional Divergence",
-  "FEve" = "Functional Evenness",
-  "FDis" = "Functional Dispersion"
-)
-
-data_aggr |>
-  subset(grepl("^F", variable)) |>
-  ggplot(aes(
-    x = Year, y = value, color = factor(Plot),
-    group = paste(Site, Plot)
-  )) +
-  geom_point() +
-  geom_line() +
-  labs(col = "Plot") +
-  theme_minimal() +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "FRic" = "Functional Richness (scaled)",
+    "FDiv" = "Functional Divergence",
+    "FEve" = "Functional Evenness",
+    "FDis" = "Functional Dispersion"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Functional Indices Across Plots and Years"
+  )
+}
 ```
 
-## Taxonomic (un)determination
+These indices provide a comprehensive understanding of how functionally diverse or redundant communities are, and how trait variability may influence ecosystem processes.
 
-```{r taxo-undet}
+```{r taxo-undet, echo=FALSE}
+#| message: false
+#| warning: false
 # add information on percentage of undetermined species
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(
     p_undet_spp = sum(is.na(species_cleaned)) / n(),
     p_undet_gen = sum(is.na(genus_cleaned)) / n(),
   ) |>
   pivot_longer(starts_with("p_undet"), names_to = "variable") |>
   rbind(data_aggr)
-
-data_aggr |>
-  subset(grepl("p_undet", variable)) |>
-  ggplot(aes(x = Year, y = value * 100, colour = factor(Plot))) +
-  geom_line() +
-  labs(y = "Undetermined stems (%)", colour = "Plot") +
-  facet_wrap(~variable) +
-  theme_minimal()
 ```
 
-## Functional undetermination
-
 ```{r functional-undet}
+#| message: false
+#| warning: false
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year, scientific_cleaned) |>
+  group_by(Site, Plot, Year = year_census, scientific_cleaned) |>
   reframe(ba = (diameter_cor / 200)^2 * pi) |>
   merge(
-    read.delim("data/derived_data/traits_v2.tsv"),
+    read.delim("data/derived_data/traits_v5.tsv"),
     by = "scientific_cleaned"
   ) |>
   group_by(Site, Plot, Year, variable = paste0("p_imputed_", trait)) |>
   reframe(
-    value = 1 - sum(!is.na(trait_value_raw)) / sum(!is.na(trait_value_imputed))
+    value = 1 - sum(!is.na(species_trait_value_raw)) /
+      sum(!is.na(genus_trait_value_imputed))
   ) |>
   rbind(data_aggr)
 ```
 
-## Structural diversity
+## Structural Composition and Diversity
+
+To assess the physical structure of forest communities, we quantified a range of metrics describing structural composition, diversity, and dynamics. These indicators reflect differences in size distribution, biomass, and demographic processes, offering insights into forest development, competition, and disturbance regimes.
 
 ```{r gini-coef}
+#| message: false
+#| warning: false
 # as coded in package DescTools
 gini <- function(x, w = NULL, unbiased = TRUE) {
   x <- x[!is.na(x)]
@@ -1519,38 +2264,83 @@ gini <- function(x, w = NULL, unbiased = TRUE) {
 }
 
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(variable = "gini", value = gini(diameter_cor)) |>
   rbind(data_aggr)
 ```
 
-```{r dbh-mean}
+```{r dbh-median}
+#| message: false
+#| warning: false
 data_aggr <- data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(variable = "dbh_median", value = median(diameter_cor)) |>
   rbind(data_aggr)
 ```
 
-```{r display-structural-div}
-var_names <- c("gini" = "Gini coefficient", "dbh_median" = "Median DBH (cm)")
-
-data_aggr |>
-  subset(variable %in% c("gini", "dbh_median")) |>
-  ggplot(aes(x = Year, y = value, color = factor(Plot))) +
-  geom_point() +
-  geom_line() +
-  labs(col = "Plot") +
-  theme_minimal() +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+```{r dbh-mean}
+#| message: false
+#| warning: false
+data_aggr <- data_cor |>
+  group_by(Site, Plot, Year = year_census) |>
+  summarise(variable = "dbh_mean", value = mean(diameter_cor)) |>
+  rbind(data_aggr)
 ```
 
-## Stem abundance
+```{r dbh-min}
+#| message: false
+#| warning: false
+data_aggr <- data_cor |>
+  group_by(Site, Plot, Year = year_census) |>
+  summarise(variable = "dbh_min", value = min(diameter_cor)) |>
+  rbind(data_aggr)
+```
+
+```{r dbh-max}
+#| message: false
+#| warning: false
+data_aggr <- data_cor |>
+  group_by(Site, Plot, Year = year_census) |>
+  summarise(variable = "dbh_max", value = max(diameter_cor)) |>
+  rbind(data_aggr)
+```
+
+We characterized the size structure of the tree community using mean, minimum, mean and median of the DBH, reflecting the general size of individuals.
+
+We also calculated the Gini coefficient, a widely used measure of inequality adapted to forest structure. In this context, the Gini index measures inequality in stem diameters within a plot: A Gini index of 0 indicates perfect equality, where all trees have the same diameter. A Gini index closer to 1 reflects high inequality, where tree size is concentrated among a few individuals.
+
+The following figures represent all the above mentioned indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
+
+```{r display-structural-div}
+#| message: false
+#| warning: false
+#| fig.width: 8
+#| fig.height: 6
+
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "gini" = "Gini coefficient", "dbh_median" = "Median DBH (cm)",
+    "dbh_mean" = "Mean  DBH (cm))", "dbh_min" = "Min DBH (cm)",
+    "dbh_max" = "Max DBH (cm)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Structural composition Across Plots and Years"
+  )
+}
+```
+
+### Stem abundance
+
+To capture temporal changes in forest structure, we calculated the stem abundance, as well as the recruiment and mortality.
+
+The following figures represent the stem abundances and demographic rates. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
 
 ```{r stem-abundance}
 #| message: false
+#| warning: false
 data_aggr <-
   data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(
     nstem = n() / unique(PlotArea)
   ) |>
@@ -1560,9 +2350,10 @@ data_aggr <-
 
 ```{r stem-recruitment}
 #| message: false
+#| warning: false
 data_aggr <- data_cor |>
   mutate(recr = ifelse(Year == recr_year, 1 / (Year - prev_census), 0)) |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(nstem_recr = sum(recr / PlotArea)) |>
   pivot_longer(nstem_recr, names_to = "variable") |>
   rbind(data_aggr)
@@ -1570,9 +2361,10 @@ data_aggr <- data_cor |>
 
 ```{r stem-mort}
 #| message: false
+#| warning: false
 data_aggr <- data_cor |>
   subset(Year == mort_year) |>
-  group_by(Site, Plot, Year, next_census) |>
+  group_by(Site, Plot, Year = year_census, next_census) |>
   summarise(nstem_mort = sum(1 / (next_census - Year) / unique(PlotArea))) |>
   mutate(Year = next_census) |>
   subset(!is.na(Year)) |>
@@ -1582,49 +2374,33 @@ data_aggr <- data_cor |>
   rbind(data_aggr)
 ```
 
-```{r plot-stem, fig.height=4, fig.width=12}
+```{r plot-stem}
+#| message: false
 #| warning: false
-var_names <- c(
-  "nstem" = "Stem abundance (/ha)",
-  "nstem_recr" = "Stem recruitment rate (/ha/yr)",
-  "nstem_mort" = "Stem mortality rate (/ha/yr)"
-)
+#| fig.width: 8
+#| fig.height: 3
 
-data_aggr |>
-  subset(grepl("nstem", variable)) |>
-  ggplot(aes(x = Year, y = value, color = factor(Plot))) +
-  geom_point() +
-  geom_line() +
-  labs(col = "Plot") +
-  theme_minimal() +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "nstem" = "Stem abundance (/ha)",
+    "nstem_recr" = "Stem recruitment rate (/ha/yr)",
+    "nstem_mort" = "Stem mortality rate (/ha/yr)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Demographic rates Across Plots and Years"
+  )
+}
 ```
 
-<!-- ```{r} -->
+### Basal Area (BA)
 
-<!-- # TEMP check that diff and diff2 are the same: -->
+In addition, we assessed basal area (BA) and above-ground biomass (AGB) stocks, as well as the BA and AGB contributions in recruitment, growth and mortality, to track structural development and resource accumulation.
 
-<!-- data_aggr |> -->
-
-<!--   subset(grepl("nstem", variable)) |>  -->
-
-<!--   pivot_wider(names_from = variable) |>  -->
-
-<!--   group_by(Site, Plot) |>  -->
-
-<!--   arrange(Site, Plot, Year) |>  -->
-
-<!--   mutate(diff = c(NA, (nstem[-1]-nstem[-length(nstem)])/diff(Year))) |>  -->
-
-<!--   mutate(diff2 = nstem_recr-nstem_mort) |>  -->
-
-<!--   subset(abs(diff-diff2)>1e-4) -->
-
-<!-- ``` -->
-
-## Basal area
+The following figures represent the different BAand AGB related indices. The y axis shows the different census years, while the x-axis shows the value of the indices. The different coloured lines represent the plots.
 
 ```{r ba}
+#| message: false
+#| warning: false
 ba_func <- function(x) pi * (x / 200)**2
 data_cor <- data_cor |>
   mutate(
@@ -1636,9 +2412,10 @@ data_cor <- data_cor |>
 
 ```{r ba-stock}
 #| message: false
+#| warning: false
 data_aggr <-
   data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(
     ba = sum(ba / PlotArea)
   ) |>
@@ -1648,9 +2425,13 @@ data_aggr <-
 
 ```{r ba-recr}
 #| message: false
+#| warning: false
 data_aggr <- data_cor |>
   # ba recruitment per tree
-  mutate(recr = ifelse(Year == recr_year, ba / (Year - prev_census), 0)) |>
+  mutate(recr = ifelse(Year == recr_year,
+    ba / (year_census - prev_census),
+    0
+  )) |>
   group_by(Site, Plot, Year) |>
   summarise(ba_recr = sum(recr / PlotArea)) |>
   pivot_longer(ba_recr, names_to = "variable") |>
@@ -1659,10 +2440,11 @@ data_aggr <- data_cor |>
 
 ```{r ba-growth}
 #| message: false
+#| warning: false
 data_aggr <- data_cor |>
   subset(!is.na(ba_growth)) |>
   mutate(ba_gr_yr = ba_growth) |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(ba_growth = sum(ba_gr_yr / PlotArea)) |>
   pivot_longer(ba_growth, names_to = "variable") |>
   rbind(data_aggr)
@@ -1670,9 +2452,10 @@ data_aggr <- data_cor |>
 
 ```{r ba-mort}
 #| message: false
+#| warning: false
 data_aggr <- data_cor |>
-  subset(Year == mort_year) |>
-  group_by(Site, Plot, Year, next_census) |>
+  subset(year_census == mort_year) |>
+  group_by(Site, Plot, Year = year_census, next_census) |>
   summarise(ba_mort = sum(ba / (next_census - Year) / PlotArea)) |>
   mutate(Year = next_census) |>
   subset(!is.na(Year)) |>
@@ -1681,52 +2464,61 @@ data_aggr <- data_cor |>
   rbind(data_aggr)
 ```
 
-```{r fig-ba, fig.height=8, fig.width=12}
+```{r fig-ba}
+#| message: false
 #| warning: false
-var_names <- c(
-  "ba" = "Basal area (m2/ha)",
-  "ba_recr" = "BA recruitment (m2/ha/yr)",
-  "ba_growth" = "BA growth (m2/ha/yr)",
-  "ba_mort" = "BA mortality (m2/ha/yr)"
-)
+#| fig.width: 8
+#| fig.height: 6
 
-data_aggr |>
-  subset(grepl("^ba", variable)) |>
-  ggplot(aes(
-    x = Year, y = value, color = factor(Plot),
-    group = paste(Site, Plot)
-  )) +
-  geom_point() +
-  geom_line() +
-  labs(col = "Plot") +
-  theme_minimal() +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "ba" = "Basal area (m2/ha)",
+    "ba_recr" = "BA recruitment (m2/ha/yr)",
+    "ba_growth" = "BA growth (m2/ha/yr)",
+    "ba_mort" = "BA mortality (m2/ha/yr)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Basal area dynamics"
+  )
+}
 ```
 
-## Aboveground biomass
+### Aboveground biomass (AGB)
 
-We use equation 7 from Chave et al. (2014) to estimate tree-level aboveground biomass.
+We used equation 7 from Chave et al. (2014) to estimate tree-level aboveground biomass.
 
 ```{r add-wd}
+#| message: false
+#| warning: false
 # add wood density
-data_cor <- read.delim("data/derived_data/traits_v2.tsv") |>
+data_cor <- read.delim("data/derived_data/traits_v5.tsv") |>
   subset(trait == "WD") |>
-  pivot_wider(
-    id_cols = "scientific_cleaned",
-    names_from = trait,
-    values_from = trait_value_imputed
-  ) |>
-  merge(data_cor, all.y = TRUE)
+  mutate(WD = ifelse(is.na(species_trait_value_raw),
+    genus_trait_value_imputed,
+    species_trait_value_raw
+  )) |>
+  select(scientific_cleaned, WD) |>
+  right_join(data_cor)
 
 p_na_wd <- round(sum(is.na(data_cor$WD)) / nrow(data_cor) * 100, 1)
 data_cor <- data_cor |>
   group_by(Site, Plot, Year) |>
+  mutate(WD = ifelse(is.na(WD), mean(WD, na.rm = TRUE), WD)) %>%
+  group_by(Site, Year) |>
+  mutate(WD = ifelse(is.na(WD), mean(WD, na.rm = TRUE), WD)) %>%
+  group_by(Site) |>
   mutate(WD = ifelse(is.na(WD), mean(WD, na.rm = TRUE), WD))
+
+if (any(is.na(data_cor$WD))) {
+  stop("NA in WD")
+}
 ```
 
 We used imputed specific wood density values; for individuals that were not identified to the species (`r p_na_wd`%), we use an average wood density value per plot and census year.
 
 ```{r agb}
+#| message: false
+#| warning: false
 agb_func <- function(d, wd, e_var) {
   return(exp(-2.023977 - 0.89563505 * e_var + 0.92023559 * log(wd) +
     2.79495823 * log(d) - 0.04606298 * (log(d)^2)) / 1000) # nolint
@@ -1737,13 +2529,17 @@ data_cor <- data_cor |>
     agb_growth = agb_func(diameter_cor - diam_growth + diam_growth_cor, WD, e) -
       agb_func(diameter_cor - diam_growth, WD, e)
   )
+if (any(is.na(data_cor$agb))) {
+  stop("NA in AGB values")
+}
 ```
 
 ```{r agb-stocks}
 #| message: false
+#| warning: false
 data_aggr <-
   data_cor |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(
     agb = sum(agb / PlotArea)
   ) |>
@@ -1753,10 +2549,13 @@ data_aggr <-
 
 ```{r agb-recr}
 #| message: false
+#| warning: false
 data_aggr <- data_cor |>
   # agb recruitment per tree
-  mutate(recr = ifelse(Year == recr_year, agb / (Year - prev_census), 0)) |>
-  group_by(Site, Plot, Year) |>
+  mutate(recr = ifelse(year_census == recr_year,
+    agb / (year_census - prev_census), 0
+  )) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(agb_recr = sum(recr / PlotArea)) |>
   pivot_longer(agb_recr, names_to = "variable") |>
   rbind(data_aggr)
@@ -1764,10 +2563,11 @@ data_aggr <- data_cor |>
 
 ```{r agb_growth}
 #| message: false
+#| warning: false
 data_aggr <- data_cor |>
   subset(!is.na(agb_growth)) |>
   mutate(agb_gr_yr = agb_growth) |>
-  group_by(Site, Plot, Year) |>
+  group_by(Site, Plot, Year = year_census) |>
   summarise(agb_growth = sum(agb_gr_yr / PlotArea)) |>
   pivot_longer(agb_growth, names_to = "variable") |>
   rbind(data_aggr)
@@ -1775,9 +2575,10 @@ data_aggr <- data_cor |>
 
 ```{r agb-mort}
 #| message: false
+#| warning: false
 data_aggr <- data_cor |>
   subset(Year == mort_year) |>
-  group_by(Site, Plot, Year, next_census) |>
+  group_by(Site, Plot, Year = year_census, next_census) |>
   summarise(agb_mort = sum(agb / (next_census - Year) / PlotArea)) |>
   mutate(Year = next_census) |>
   subset(!is.na(Year)) |>
@@ -1786,48 +2587,47 @@ data_aggr <- data_cor |>
   rbind(data_aggr)
 ```
 
-```{r fig-agb, fig.height=8, fig.width=12}
+```{r fig-agb}
+#| message: false
 #| warning: false
-var_names <- c(
-  "agb" = "AGB (t/ha)",
-  "agb_recr" = "AGB recruitment (t/ha/yr)",
-  "agb_growth" = "AGB growth (t/ha/yr)",
-  "agb_mort" = "AGB mortality (t/ha/yr)"
-)
+#| fig.width: 8
+#| fig.height: 6
 
-data_aggr |>
-  subset(grepl("agb", variable)) |>
-  ggplot(aes(
-    x = Year, y = value, color = factor(Plot),
-    group = paste(Site, Plot)
-  )) +
-  geom_point() +
-  geom_line() +
-  labs(col = "Plot") +
-  theme_minimal() +
-  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(var_names))
+if (isTRUE(params$print)) {
+  var_names <- c(
+    "agb" = "AGB (t/ha)",
+    "agb_recr" = "AGB recruitment (t/ha/yr)",
+    "agb_growth" = "AGB growth (t/ha/yr)",
+    "agb_mort" = "AGB mortality (t/ha/yr)"
+  )
+  aggr_fig(data_aggr, var_names,
+    title_fig = "Aboveground biomass dynamics"
+  )
+}
 ```
 
-# Save aggregated data
+# Conclusion
+
+All the aggregated data generated is stored in a csv file, which will further be used for analysis in the Bioforest project.
 
 ```{r save-aggregated-data}
 data_aggr |>
   write.csv(paste0(
     "data/derived_data/aggregated_data_",
-    paste(gsub(" ", "_", tolower(unique(data_aggr$Site))), collapse = "_"),
+    params$site,
     ".csv"
   ), row.names = FALSE)
 ```
 
-# Save plot area information
-
-```{rsave-plot-area}
+```{r save-plot-area}
+#| message: false
+#| warning: false
 data_cor |>
   select(Site, Plot, PlotArea) |>
   unique() |>
   write.csv(paste0(
     "data/derived_data/plot_area_",
-    paste(gsub(" ", "_", tolower(unique(data_aggr$Site))), collapse = "_"),
+    params$site,
     ".csv"
   ), row.names = FALSE)
 ```
