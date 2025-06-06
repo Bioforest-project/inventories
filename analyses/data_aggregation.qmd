@@ -901,105 +901,105 @@ if (any(colnames(data_cor) == "HOM")) {
 # here I take the results of Model 1
 # THIS IS NOT GOOD
 #| eval: false
-taper <- function(diam, hom) {
-  # default hom (no correction) when there is no reliable information
-  hom[is.na(hom) | hom <= 0 | hom > 20] <- 1.3
-  b <- exp(-0.3091 -0.6147 * log(diam) -0.6071 * log(hom))
-  return(diam * exp(b * (hom - 1.3)))
-}
-
-if (any(colnames(data_cor) == "HOM")) {
-  if (any(data_cor$HOM != 1.3)) {
-    text <- paste(
-      "The height of measurement information is available so we could apply",
-      "the taper correction from Cushman et al., 2014."
-    )
-    # harmonize HOM values
-    data_cor <- data_cor |>
-      mutate(HOM = as.numeric(HOM)) |>
-      # some values in cm: convert to m
-      mutate(HOM = ifelse(HOM >= 50, HOM / 100, HOM)) |>
-      # apply correction
-      mutate(diameter_cor = taper(diameter_cor, HOM))
-
-    subset(data_cor, HOM != 1.3) |>
-      ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
-      geom_abline(intercept = 0, slope = 1, lty = 2) +
-      geom_point() +
-      labs(x = "Original diameter (cm)", y = "Taper-corrected diameter (cm)") +
-      scale_color_viridis_c() +
-      theme_classic()
-  } else {
-    text <- paste(
-      "All measurements were recorded as having been taken at HOM = 1.3 m, so",
-      "we did not need to apply a taper correction."
-    )
-  }
-} else {
-  text <- paste(
-    "There is no information on height of measurement,",
-    "so we could not apply any taper correction."
-  )
-}
+# taper <- function(diam, hom) {
+#   # default hom (no correction) when there is no reliable information
+#   hom[is.na(hom) | hom <= 0 | hom > 20] <- 1.3
+#   b <- exp(-0.3091 -0.6147 * log(diam) -0.6071 * log(hom))
+#   return(diam * exp(b * (hom - 1.3)))
+# }
+# 
+# if (any(colnames(data_cor) == "HOM")) {
+#   if (any(data_cor$HOM != 1.3)) {
+#     text <- paste(
+#       "The height of measurement information is available so we could apply",
+#       "the taper correction from Cushman et al., 2014."
+#     )
+#     # harmonize HOM values
+#     data_cor <- data_cor |>
+#       mutate(HOM = as.numeric(HOM)) |>
+#       # some values in cm: convert to m
+#       mutate(HOM = ifelse(HOM >= 50, HOM / 100, HOM)) |>
+#       # apply correction
+#       mutate(diameter_cor = taper(diameter_cor, HOM))
+# 
+#     subset(data_cor, HOM != 1.3) |>
+#       ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
+#       geom_abline(intercept = 0, slope = 1, lty = 2) +
+#       geom_point() +
+#       labs(x = "Original diameter (cm)", y = "Taper-corrected diameter (cm)") +
+#       scale_color_viridis_c() +
+#       theme_classic()
+#   } else {
+#     text <- paste(
+#       "All measurements were recorded as having been taken at HOM = 1.3 m, so",
+#       "we did not need to apply a taper correction."
+#     )
+#   }
+# } else {
+#   text <- paste(
+#     "There is no information on height of measurement,",
+#     "so we could not apply any taper correction."
+#   )
+# }
 ```
 
 ```{r taper-correction-ter}
 # This is to test the model of the 2021 paper (test GD)
 #| eval: false
-taper <- function(diam, hom) {
-  # default hom (no correction) when there is no reliable information
-  hom[is.na(hom) | hom <= 0 | hom > 20] <- 1.3
-  b <-  0.156  -0.023 * log(diam) -0.021 * log(hom)
-  return(diam * exp(b * (hom - 1.3)))
-}
-
-if (any(colnames(data_cor) == "HOM")) {
-  if (any(data_cor$HOM != 1.3)) {
-    text <- paste(
-      "The height of measurement information is available so we could apply",
-      "the taper correction from Cushman et al., 2014."
-    )
-    # harmonize HOM values
-    data_cor <- data_cor |>
-      mutate(HOM = as.numeric(HOM)) |>
-      # some values in cm: convert to m
-      mutate(HOM = ifelse(HOM >= 50, HOM / 100, HOM)) |>
-      # apply correction
-      mutate(diameter_cor = taper(diameter_cor, HOM))
-
-    subset(data_cor, HOM != 1.3) |>
-      ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
-      geom_abline(intercept = 0, slope = 1, lty = 2) +
-      geom_point() +
-      labs(x = "Original diameter (cm)", y = "Taper-corrected diameter (cm)") +
-      scale_color_viridis_c() +
-      theme_classic()
-  } else {
-    text <- paste(
-      "All measurements were recorded as having been taken at HOM = 1.3 m, so",
-      "we did not need to apply a taper correction."
-    )
-  }
-} else {
-  text <- paste(
-    "There is no information on height of measurement,",
-    "so we could not apply any taper correction."
-  )
-}
-
-# data_cor |> filter(diameter_cor < Diameter) |> summarise(range(HOM))
-# the case when we have a lower corrected values are for cases when the HOM < 1.3
-
-# the correction seems ok for the low HOM but bad for the high ones...
-# in the 2021 paper, the range of HOM is 1.5 to 7.17
-    subset(data_cor, HOM != 1.3 & HOM < 7.2) |>
-      ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
-      geom_abline(intercept = 0, slope = 1, lty = 2) +
-      geom_point() +
-      labs(x = "Original diameter (cm)", y = "Taper-corrected diameter (cm)") +
-      scale_color_viridis_c() +
-      theme_classic()
-# it's not better...
+# taper <- function(diam, hom) {
+#   # default hom (no correction) when there is no reliable information
+#   hom[is.na(hom) | hom <= 0 | hom > 20] <- 1.3
+#   b <-  0.156  -0.023 * log(diam) -0.021 * log(hom)
+#   return(diam * exp(b * (hom - 1.3)))
+# }
+# 
+# if (any(colnames(data_cor) == "HOM")) {
+#   if (any(data_cor$HOM != 1.3)) {
+#     text <- paste(
+#       "The height of measurement information is available so we could apply",
+#       "the taper correction from Cushman et al., 2014."
+#     )
+#     # harmonize HOM values
+#     data_cor <- data_cor |>
+#       mutate(HOM = as.numeric(HOM)) |>
+#       # some values in cm: convert to m
+#       mutate(HOM = ifelse(HOM >= 50, HOM / 100, HOM)) |>
+#       # apply correction
+#       mutate(diameter_cor = taper(diameter_cor, HOM))
+# 
+#     subset(data_cor, HOM != 1.3) |>
+#       ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
+#       geom_abline(intercept = 0, slope = 1, lty = 2) +
+#       geom_point() +
+#       labs(x = "Original diameter (cm)", y = "Taper-corrected diameter (cm)") +
+#       scale_color_viridis_c() +
+#       theme_classic()
+#   } else {
+#     text <- paste(
+#       "All measurements were recorded as having been taken at HOM = 1.3 m, so",
+#       "we did not need to apply a taper correction."
+#     )
+#   }
+# } else {
+#   text <- paste(
+#     "There is no information on height of measurement,",
+#     "so we could not apply any taper correction."
+#   )
+# }
+# 
+# # data_cor |> filter(diameter_cor < Diameter) |> summarise(range(HOM))
+# # the case when we have a lower corrected values are for cases when the HOM < 1.3
+# 
+# # the correction seems ok for the low HOM but bad for the high ones...
+# # in the 2021 paper, the range of HOM is 1.5 to 7.17
+#     subset(data_cor, HOM != 1.3 & HOM < 7.2) |>
+#       ggplot(aes(x = Diameter, y = diameter_cor, col = HOM)) +
+#       geom_abline(intercept = 0, slope = 1, lty = 2) +
+#       geom_point() +
+#       labs(x = "Original diameter (cm)", y = "Taper-corrected diameter (cm)") +
+#       scale_color_viridis_c() +
+#       theme_classic()
+# # it's not better...
 
 ```
 
