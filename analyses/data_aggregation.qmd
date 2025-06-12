@@ -258,6 +258,15 @@ if (any(data_cor$Site == "Malinau")) {
     "In Malinau, we removed the census of 2012 as discussed with the PI"
   )
 }
+if (any(data_cor$Site == "BAFOG")) {
+  data_cor <- data_cor |>
+    subset(!(Site == "BAFOG" & Year == 2017 & Plot == "VI"))
+  text <- paste(
+    text,
+    "In BAFOG, we removed the census of 2017 for plot VI (partial measurment)"
+  )
+}
+
 ```
 
 `r text`
@@ -1783,7 +1792,7 @@ The traits computed in the analysis were:
 #### Leaf area
 Associated with light capture and leaf construction cost
 
-- Leaf nitrogen content per leaf dry mass
+#### Leaf nitrogen content per leaf dry mass
 Reflects photosynthetic capacity and nutrient-use strategy.
 
 #### Specific leaf area (SLA)
@@ -2195,7 +2204,7 @@ data_aggr <- data_cor |>
   rbind(data_aggr)
 ```
 
-We characterized the size structure of the tree community using mean, minimum, mean and median of the DBH, reflecting the general size of individuals.
+We characterized the size structure of the tree community using maximum, minimum, mean and median of the DBH, reflecting the general size of individuals.
 
 We also calculated the Gini coefficient, a widely used measure of inequality adapted to forest structure. In this context, the Gini index measures inequality in stem diameters within a plot: A Gini index of 0 indicates perfect equality, where all trees have the same diameter. A Gini index closer to 1 reflects high inequality, where tree size is concentrated among a few individuals.
 
