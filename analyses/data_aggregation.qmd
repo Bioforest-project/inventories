@@ -7,7 +7,7 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: mbaiki
+  site: uppangala
   taper: false
   print: true
 
@@ -166,6 +166,37 @@ data_cor <- data_cor |>
   left_join(data_species, by = c("raw_taxonomy"))
 ```
 
+```{r temp-complete-species}
+data_species_complete <- read_tsv("data/derived_data/taxonomy_v5.tsv") |>
+  select(genus_raw, species_raw, contains("cleaned")) |>
+  subset(!is.na(species_cleaned)) |>
+  unique()
+colnames(data_species_complete) <- gsub(
+  "cleaned", "complete",
+  colnames(data_species_complete)
+)
+data_cor <- data_cor |>
+  separate(ScientificName, c("genus_sn", "species_sn"),
+    extra = "drop", remove = FALSE
+  ) |>
+  left_join(data_species_complete,
+    by = join_by(genus_sn == genus_raw, species_sn == species_raw)
+  ) |>
+  mutate(
+    scientific_cleaned = ifelse(
+      is.na(species_cleaned) & !is.na(species_complete),
+      scientific_complete, scientific_cleaned
+    )
+  ) |>
+  mutate(
+    species_cleaned = ifelse(
+      is.na(species_cleaned) & !is.na(species_complete),
+      species_complete, species_cleaned
+    )
+  ) |>
+  select(!contains("_complete") & !contains("_sn"))
+```
+
 ```{r complete-plotarea-data}
 #| message: false
 #| warning: false
@@ -263,10 +294,9 @@ if (any(data_cor$Site == "BAFOG")) {
     subset(!(Site == "BAFOG" & Year == 2017 & Plot == "VI"))
   text <- paste(
     text,
-    "In BAFOG, we removed the census of 2017 for plot VI (partial measurment)"
+    "In BAFOG, we removed the census of 2017 for plot VI (partial measurement)."
   )
 }
-
 ```
 
 `r text`
@@ -523,39 +553,39 @@ If you notice an inconsistency in this information, please let us know.
 
 if (params$print) {
   # Create plot
-  for (i in unique(data_cor$Site)) {
-    data_cor |>
-      filter(Site == i) |>
-      group_by(Site, Plot, Year) |>
-      summarise(
-        Undetermined = sum(is.na(genus_cleaned)) / length(genus_cleaned),
-        `Genus Only` = sum(!is.na(genus_cleaned) & is.na(species_cleaned))
-        / length(genus_cleaned),
-        Species = sum(!is.na(species_cleaned)) / length(species_cleaned)
-      ) |>
-      pivot_longer(cols = c("Undetermined", "Genus Only", "Species")) |>
-      mutate(
-        name = factor(name, levels = c("Undetermined", "Genus Only", "Species"))
-      ) |>
-      ggplot(aes(as.character(Year), value, fill = name)) +
-      geom_col() +
-      facet_wrap(~Plot,
-        scales = "free_y",
-        labeller = label_both
-      ) +
-      scale_y_continuous(breaks = c(0, 0.5, 1)) +
-      labs(
-        fill = "ID level",
-        title = paste("Proportion of taxonomic ID resolution -", i)
-      ) +
-      labs(x = NULL, y = NULL) +
-      theme_minimal() +
-      theme(legend.position = "bottom") +
-      theme(
-        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
-      ) +
-      scale_fill_manual(values = c("#D53E4F", "#FEE08B", "#3288BD"))
-  }
+  # for (i in unique(data_cor$Site)) {
+  data_cor |>
+    # filter(Site == i) |>
+    group_by(Site, Plot, Year) |>
+    summarise(
+      Undetermined = sum(is.na(genus_cleaned)) / length(genus_cleaned),
+      `Genus Only` = sum(!is.na(genus_cleaned) & is.na(species_cleaned))
+      / length(genus_cleaned),
+      Species = sum(!is.na(species_cleaned)) / length(species_cleaned)
+    ) |>
+    pivot_longer(cols = c("Undetermined", "Genus Only", "Species")) |>
+    mutate(
+      name = factor(name, levels = c("Undetermined", "Genus Only", "Species"))
+    ) |>
+    ggplot(aes(as.character(Year), value, fill = name)) +
+    geom_col() +
+    facet_wrap(~Plot,
+      scales = "free_y",
+      labeller = label_both
+    ) +
+    scale_y_continuous(breaks = c(0, 0.5, 1)) +
+    labs(
+      fill = "ID level",
+      title = "Proportion of taxonomic ID resolution"
+    ) +
+    labs(x = NULL, y = NULL) +
+    theme_minimal() +
+    theme(legend.position = "bottom") +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+    ) +
+    scale_fill_manual(values = c("#D53E4F", "#FEE08B", "#3288BD"))
+  # }
 }
 ```
 
@@ -969,7 +999,7 @@ We want to ensure that this dataset contains only live trees, so we carry out 2 
 alive <- c(1:4, TRUE, NA, "Normal", "Recruit")
 text <- ""
 # embrapa sites : CIF <= 5: live trees
-if ("LifeStatus" %in% colnames(data_cor)) {
+if ("LifeStatus" %in% colnames(data_cor) & params$site != "uppangala") { #nolint
   n_dead <- sum(!data_cor$LifeStatus %in% alive)
   if (n_dead > 0) {
     text <- paste0(
@@ -991,9 +1021,9 @@ if ("LifeStatus" %in% colnames(data_cor)) {
   data_cor <- data_cor |> subset(LifeStatus %in% alive)
 } else {
   text <- paste(
-    "In this dataset, there was no column 'LifeStatus' with information about",
-    "life status (dead/alive), so we considered all stems to be alive: please",
-    "let us know if we should have used another column."
+    "In this dataset, all stem measurements are assumed to be from living",
+    "trees. Please let us know if any dead measurements should be removed and",
+    "how to identify them in the data."
   )
 }
 ```
