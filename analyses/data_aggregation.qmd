@@ -438,7 +438,7 @@ Most sites have separate columns with the species vernacular names, and scientif
 # add scientific names of unidentified stems based on vernacular names
 # (only for French Guiana sites)
 
-if (params$site %in% c("paracou", "montagne-tortue", "bafog", "manare")) {
+if (params$site %in% c("paracou", "montagnetortue", "bafog", "manare")) {
   vern <- data_cor |>
     select(VernName, scientific_cleaned) |>
     drop_na() |>
