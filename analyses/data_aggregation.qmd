@@ -142,6 +142,7 @@ data_raw <-
   bind_rows() |>
   mutate(Site = as.character(Site)) |>
   rename(site_raw = Site) |>
+  # todo solve issue with site matching
   left_join(read.csv("data/raw_data/sites.csv")) |>
   select(-site_raw) |>
   rename(Site = site) |>
@@ -164,37 +165,47 @@ data_species <-
 
 data_cor <- data_cor |>
   left_join(data_species, by = c("raw_taxonomy"))
+# temp - SUAS
+if (params$site == "suas") {
+  data_cor <- data_cor |>
+    separate(ScientificName, c("genus_cleaned", "species_cleaned"),
+      remove = FALSE
+    ) |>
+    mutate(scientific_cleaned = paste(genus_cleaned, species_cleaned))
+}
 ```
 
 ```{r temp-complete-species}
-data_species_complete <- read_tsv("data/derived_data/taxonomy_v5.tsv") |>
-  select(genus_raw, species_raw, contains("cleaned")) |>
-  subset(!is.na(species_cleaned)) |>
-  unique()
-colnames(data_species_complete) <- gsub(
-  "cleaned", "complete",
-  colnames(data_species_complete)
-)
-data_cor <- data_cor |>
-  separate(ScientificName, c("genus_sn", "species_sn"),
-    extra = "drop", remove = FALSE
-  ) |>
-  left_join(data_species_complete,
-    by = join_by(genus_sn == genus_raw, species_sn == species_raw)
-  ) |>
-  mutate(
-    scientific_cleaned = ifelse(
-      is.na(species_cleaned) & !is.na(species_complete),
-      scientific_complete, scientific_cleaned
-    )
-  ) |>
-  mutate(
-    species_cleaned = ifelse(
-      is.na(species_cleaned) & !is.na(species_complete),
-      species_complete, species_cleaned
-    )
-  ) |>
-  select(!contains("_complete") & !contains("_sn"))
+if ("Uppangala" %in% data_raw$Site) {
+  data_species_complete <- read_tsv("data/derived_data/taxonomy_v5.tsv") |>
+    select(genus_raw, species_raw, contains("cleaned")) |>
+    subset(!is.na(species_cleaned)) |>
+    unique()
+  colnames(data_species_complete) <- gsub(
+    "cleaned", "complete",
+    colnames(data_species_complete)
+  )
+  data_cor <- data_cor |>
+    separate(ScientificName, c("genus_sn", "species_sn"),
+      extra = "drop", remove = FALSE
+    ) |>
+    left_join(data_species_complete,
+      by = join_by(genus_sn == genus_raw, species_sn == species_raw)
+    ) |>
+    mutate(
+      scientific_cleaned = ifelse(
+        is.na(species_cleaned) & !is.na(species_complete),
+        scientific_complete, scientific_cleaned
+      )
+    ) |>
+    mutate(
+      species_cleaned = ifelse(
+        is.na(species_cleaned) & !is.na(species_complete),
+        species_complete, species_cleaned
+      )
+    ) |>
+    select(!contains("_complete") & !contains("_sn"))
+}
 ```
 
 ```{r complete-plotarea-data}
@@ -1604,6 +1615,7 @@ The last step of this document is to calculate and visualize all the variables o
 ```{r create-data_aggr}
 #| message: false
 #| warning: false
+rm(list = setdiff(ls(), c("data_cor", "params")))
 data_aggr <- c()
 ```
 
@@ -2010,6 +2022,65 @@ if (isTRUE(params$print)) {
   aggr_fig(data_aggr, var_names,
     title_fig = "Functional composition\nweighted by mortality in BA"
   )
+}
+```
+
+#### Contribution of fluxes to functional composition changes
+
+```{r contribution-cwm-ba-fluxes}
+#| message: false
+#| warning: false
+
+if (params$site %in% c("mbaiki", "paracou")) {
+  data_temp <- data_cor |>
+    mutate(year_census = next_census, ba_prev = ba_func(diameter_cor)) |>
+    select(Site, Plot, IdStem, scientific_cleaned, year_census, ba_prev) |>
+    full_join(data_cor) |>
+    filter(!is.na(year_census)) |>
+    mutate(Year = year_census, ba = ba_func(diameter_cor)) |>
+    mutate(group = ifelse(is.na(ba_prev), "rba",
+      ifelse(is.na(ba), "mba", "gba")
+    )) |>
+    mutate(ba = ifelse(is.na(ba), 0, ba))
+
+  data_all <- data_temp |>
+    inner_join(
+      read.delim("data/derived_data/traits_v5.tsv"),
+      by = "scientific_cleaned"
+    ) |>
+    group_by(Site, Plot, Year, trait) |>
+    summarise(
+      ba_tot = sum(ba), ba_prev_tot = sum(ba_prev, na.rm = TRUE),
+      cwm_tot = sum(genus_trait_value_imputed * ba, na.rm = TRUE) / sum(ba)
+    ) |>
+    # change cwm_tot to be the year before the inventory,
+    # to standardize contributions as the change compared to the previous year
+    group_by(Site, Plot, trait) |>
+    mutate(cwm_tot = c(NA, cwm_tot[-length(cwm_tot)]))
+  data_temp <- data_temp |>
+    inner_join(
+      read.delim("data/derived_data/traits_v5.tsv"),
+      by = "scientific_cleaned"
+    ) |>
+    left_join(data_all) |>
+    group_by(Site, Plot, Year, trait, group) |>
+    summarise(
+      cwm = sum(ba * (genus_trait_value_imputed - cwm_tot), na.rm = TRUE),
+      cwm_prev = sum(ba_prev * (genus_trait_value_imputed - cwm_tot),
+        na.rm = TRUE
+      )
+    ) |>
+    left_join(data_all) |>
+    mutate(value = cwm / ba_tot - cwm_prev / ba_prev_tot) |>
+    filter(!is.na(value))
+  data_aggr <- data_temp |>
+    group_by(Site, Plot, Year, trait) |>
+    summarise(value = sum(value), group = "all") |>
+    bind_rows(data_temp) |>
+    mutate(variable = paste0(trait, "_cwmdiff_", group)) |>
+    select(Site, Plot, Year, variable, value) |>
+    bind_rows(data_aggr)
+  rm(data_temp, data_ba)
 }
 ```
 
