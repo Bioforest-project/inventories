@@ -302,10 +302,10 @@ if (any(data_cor$Site == "Malinau")) {
 }
 if (any(data_cor$Site == "BAFOG")) {
   data_cor <- data_cor |>
-    subset(!(Site == "BAFOG" & Year == 2017 & Plot == "VI"))
+    subset(!(Site == "BAFOG" & (Plot %in% c("VI", "VII")))) 
   text <- paste(
     text,
-    "In BAFOG, we removed the census of 2017 for plot VI (partial measurement)."
+    "In BAFOG, we removed all the censuses for plots VI and VII (different protocol and less reliable)."
   )
 }
 ```
