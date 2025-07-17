@@ -26,7 +26,6 @@ library(data.table)
 library(BIOMASS)
 library(ggplot2)
 library(tidyverse)
-library(fuzzyjoin)
 library(entropart)
 library(fundiversity)
 library(patchwork)
@@ -141,13 +140,11 @@ read_harmonized <- function(file) {
 data_raw <- data_list |>
   lapply(read_harmonized) |>
   bind_rows() |>
-  mutate(Site = as.character(Site)) |>
-  regex_right_join(
-    x = read.csv("data/raw_data/site_name_correction.csv"),
-    by = c(site_raw = "Site")
-  ) |>
-  select(-site_raw, -Site) |>
+  mutate(site_raw = as.character(Site)) |>
+  select(-Site) |>
+  left_join(read.csv("data/raw_data/sites.csv")) |>
   rename(Site = site) |>
+  select(-site_raw) |>
   mutate(Plot = as.character(Plot))
 ```
 
