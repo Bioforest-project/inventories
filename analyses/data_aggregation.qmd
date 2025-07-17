@@ -7,7 +7,7 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: montagnetortue
+  site: tapajoskm114
   taper: false
   harmonise_area: true
   print: true
@@ -138,13 +138,12 @@ read_harmonized <- function(file) {
 }
 
 # extracting data file and creating consistent site names
-sites <- read.csv("data/raw_data/sites.csv")
 data_raw <- data_list |>
   lapply(read_harmonized) |>
   bind_rows() |>
   mutate(Site = as.character(Site)) |>
   regex_right_join(
-    x = read.csv("data/raw_data/sites.csv"),
+    x = read.csv("data/raw_data/site_name_correction.csv"),
     by = c(site_raw = "Site")
   ) |>
   select(-site_raw, -Site) |>
@@ -522,6 +521,17 @@ if (params$site %in% c("paracou", "mbaiki", "strek") & params$harmonise_area) { 
     "smaller plots based on subplot information."
   )
 }
+```
+
+```{r group-small-plots}
+data_cor <- "data/raw_data/plot_junction.csv" |>
+  readr::read_csv(col_types = "cccd") |>
+  right_join(data_cor) |>
+  mutate(
+    Plot = ifelse(!is.na(new_plot), new_plot, Plot),
+    PlotArea = ifelse(!is.na(new_plot), new_plot_area, PlotArea)
+  ) |>
+  select(-new_plot, -new_plot_area)
 ```
 
 `r text`
