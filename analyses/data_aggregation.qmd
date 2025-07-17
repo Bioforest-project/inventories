@@ -7,8 +7,9 @@ format:
     colorlinks: true
     fig-pos: "H"
 params: 
-  site: uppangala
+  site: montagnetortue
   taper: false
+  harmonise_area: true
   print: true
 
 execute:
@@ -25,6 +26,7 @@ library(data.table)
 library(BIOMASS)
 library(ggplot2)
 library(tidyverse)
+library(fuzzyjoin)
 library(entropart)
 library(fundiversity)
 library(patchwork)
@@ -136,15 +138,16 @@ read_harmonized <- function(file) {
 }
 
 # extracting data file and creating consistent site names
-data_raw <-
-  data_list |>
+sites <- read.csv("data/raw_data/sites.csv")
+data_raw <- data_list |>
   lapply(read_harmonized) |>
   bind_rows() |>
   mutate(Site = as.character(Site)) |>
-  rename(site_raw = Site) |>
-  # todo solve issue with site matching
-  left_join(read.csv("data/raw_data/sites.csv")) |>
-  select(-site_raw) |>
+  regex_right_join(
+    x = read.csv("data/raw_data/sites.csv"),
+    by = c(site_raw = "Site")
+  ) |>
+  select(-site_raw, -Site) |>
   rename(Site = site) |>
   mutate(Plot = as.character(Plot))
 ```
@@ -302,10 +305,11 @@ if (any(data_cor$Site == "Malinau")) {
 }
 if (any(data_cor$Site == "BAFOG")) {
   data_cor <- data_cor |>
-    subset(!(Site == "BAFOG" & (Plot %in% c("VI", "VII")))) 
+    subset(!(Site == "BAFOG" & (Plot %in% c("VI", "VII"))))
   text <- paste(
     text,
-    "In BAFOG, we removed all the censuses for plots VI and VII (different protocol and less reliable)."
+    "In BAFOG, we removed all the censuses for plots VI and VII",
+    "(different protocol and less reliable)."
   )
 }
 ```
@@ -416,6 +420,7 @@ if (any(is.na(data_raw$Plot))) {
     paste("trees don't have a plot ID.")
 }
 ```
+
 `r text`
 
 *Please let us know if there are missing plots or censuses.*
@@ -467,6 +472,59 @@ if (params$print) {
   (map + plots)
 }
 ```
+
+```{r split-large-plots}
+#| message: false
+#| warning: false
+# cut plots >= 2 ha into smaller plots
+# problem with manare: some trees were not located in the larger plots
+# bafog: extrapolate missing tree coordinates based on average coordinates by
+# 25x25m subplot
+text <- ""
+if (params$site == "bafog") {
+  data_cor <- data_cor |>
+    group_by(Plot, Subplot) |>
+    mutate(
+      Xsubplot = sum(range(XTreePlot, na.rm = TRUE)) / 2,
+      Ysubplot = sum(range(YTreePlot, na.rm = TRUE)) / 2
+    ) |>
+    mutate(
+      XTreePlot = ifelse(is.na(XTreePlot), Xsubplot, XTreePlot),
+      YTreePlot = ifelse(is.na(YTreePlot), Ysubplot, YTreePlot)
+    ) |>
+    select(-Xsubplot, -Ysubplot) |>
+    ungroup()
+}
+if (params$site %in% c("montagnetortue", "bafog") & params$harmonise_area) { # nolint
+  size <- 100
+  data_cor <- data_cor |>
+    group_by(Plot) |>
+    mutate(Plot = paste(
+      Plot,
+      as.numeric(cut(XTreePlot, seq(0, round(max(XTreePlot)), size))),
+      as.numeric(cut(YTreePlot, seq(0, round(max(YTreePlot)), size))),
+      sep = "_"
+    )) |>
+    mutate(PlotArea = 1) |>
+    filter(!grepl("NA", Plot))
+
+  text <- paste(
+    "Because the plots are larger than 2 ha, we cut them into 4",
+    "1-ha plots based on tree location in the plot."
+  )
+}
+if (params$site %in% c("paracou", "mbaiki", "strek") & params$harmonise_area) { # nolint
+  data_cor <- data_cor |>
+    mutate(Plot = paste(Plot, Subplot, sep = "_")) |>
+    mutate(PlotArea = SubplotArea)
+  text <- paste(
+    "Because the plots are larger than 2 ha, we cut them into 4",
+    "smaller plots based on subplot information."
+  )
+}
+```
+
+`r text`
 
 ## Taxonomic identification
 
@@ -1010,7 +1068,7 @@ We want to ensure that this dataset contains only live trees, so we carry out 2 
 alive <- c(1:4, TRUE, NA, "Normal", "Recruit")
 text <- ""
 # embrapa sites : CIF <= 5: live trees
-if ("LifeStatus" %in% colnames(data_cor) & params$site != "uppangala") { #nolint
+if ("LifeStatus" %in% colnames(data_cor) & params$site != "uppangala") { # nolint
   n_dead <- sum(!data_cor$LifeStatus %in% alive)
   if (n_dead > 0) {
     text <- paste0(

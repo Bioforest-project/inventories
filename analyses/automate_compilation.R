@@ -71,7 +71,10 @@ if (length(compile_sites) > 0) {
         input = "analyses/data_aggregation.qmd",
         output_format = "all",
         output_file = paste0("data_aggregation_", s, ".pdf"),
-        execute_params = list(site = s, taper = FALSE, print = TRUE)
+        execute_params = list(
+          site = s, taper = FALSE,
+          print = TRUE, harmonise_area = TRUE
+        )
       )
       # move to "outputs/data_aggregation_reports" folder
       file.rename(
@@ -93,7 +96,11 @@ print(paste(
 version <- 8
 # delete previous files
 paste0("data/derived_data/aggregated_data_v", seq_len(version), ".csv") |>
-  file.remove()
+  file.remove() |>
+  suppressWarnings()
+paste0("data/derived_data/plot_area_v", seq_len(version), ".csv") |>
+  file.remove() |>
+  suppressWarnings()
 # make one file with all sites
 list.files("data/derived_data", "aggregated_data_", full.names = TRUE) |>
   lapply(function(x) read_csv(x, col_types = "ccicd")) |>
@@ -102,7 +109,13 @@ list.files("data/derived_data", "aggregated_data_", full.names = TRUE) |>
     file = paste0("data/derived_data/aggregated_data_v", version, ".csv"),
     row.names = FALSE
   )
-
+list.files("data/derived_data", "plot_area_", full.names = TRUE) |>
+  lapply(function(x) read_csv(x, col_types = "ccd")) |>
+  data.table::rbindlist() |>
+  write.csv(
+    file = paste0("data/derived_data/plot_area_v", version, ".csv"),
+    row.names = FALSE
+  )
 # copy to modelling folder
 modelling_folder <- "D:/github/Bioforest-project/modelling/data/raw_data/"
 if (dir.exists(modelling_folder)) {
