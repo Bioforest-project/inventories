@@ -55,7 +55,7 @@ remove <- c(
 compile_sites <- compile_sites[!compile_sites %in% remove]
 
 # cache: if we don't want to redo the compilation for files that already exist
-cache <- TRUE
+cache <- FALSE
 if (cache) {
   done <- list.files("data/derived_data/", pattern = "aggregated_data_") |>
     gsub(pattern = "aggregated_data_|.csv", replacement = "")
@@ -93,7 +93,7 @@ print(paste(
   paste(failed_sites, collapse = ", ")
 ))
 
-version <- 8
+version <- 9
 # delete previous files
 paste0("data/derived_data/aggregated_data_v", seq_len(version), ".csv") |>
   file.remove() |>
