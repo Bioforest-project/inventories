@@ -2097,7 +2097,7 @@ if (isTRUE(params$print)) {
 #| message: false
 #| warning: false
 
-if (params$site %in% c("mbaiki", "paracou")) {
+if (params$site %in% c("mbaiki", "paracou", "suas")) {
   data_temp <- data_cor |>
     mutate(year_census = next_census, ba_prev = ba_func(diameter_cor)) |>
     select(Site, Plot, IdStem, scientific_cleaned, year_census, ba_prev) |>
